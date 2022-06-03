@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-discord_lib = { path = "../discord_lib" }
+discord_lib = { path = "./discord_lib" }
 async-trait = "0.1.36"
 
 lazy_static = "1.4.0"
