@@ -1,0 +1,16 @@
+//command = @{ "!" ~ ANY* ~ " " ~ argument* }
+//command = { "!" ~ (!" " ~ ANY*) ~ " " ~ (argument ~ " "?)*}
+// command = { command_name ~ (" " ~ arguments)? }
+command = { SOI ~ command_name ~ (" "+ ~ argument)* ~ EOI }
+
+command_name = { (!" " ~ ANY)* }
+
+// arguments = { argument ~ (" "+ ~ argument)* }
+
+argument = { argument_quoted | argument_unquoted }
+argument_unquoted = { (!quote_char) ~ (!" " ~ ANY)* }
+argument_quoted = { PUSH(quote_char) ~ argument_quoted_inner ~ POP }
+argument_quoted_inner = { ( (!PEEK) ~ ANY)* }
+quote_char = _{ "\""|"`" }
+
+//!tags // --offset -10 "stream name"
