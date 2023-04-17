@@ -16,7 +16,7 @@ rustbreak = { version = "=2.0.0-rc3", features = ["ron_enc"] }
 # gluesql = { version = "0.1.16", features = ["sled-storage"] }
 # sqlparser = { version = "*", features = ["serde"] }
 
-sqlx = { version = "0.4.0-beta.1", default-features = false, features = [ "runtime-tokio", "macros", "chrono", "time", "tls", "postgres", "migrate" ] }
+sqlx = { version = "0.4.0-beta.1", default-features = false, features = [ "runtime-tokio-rustls", "macros", "chrono", "time", "tls", "postgres", "migrate" ] }
 time = "0.2.22"
 # refinery = { version = "0.3.0", features = ["tokio-postgres", "tokio", "postgres"] }
 # refinery = { git = "https://github.com/rust-db/refinery.git", rev="a97c2571eb0562dc92c32fe9d40d76361fa8035c", features = ["tokio-postgres", "tokio", "postgres"] }
@@ -35,3 +35,6 @@ anyhow = "1.0"
 
 pest = "2.1.3"
 pest_derive = "2.1.0"
+
+[patch.crates-io]
+hyper-rustls = { path = "vendored/hyper-rustls" }

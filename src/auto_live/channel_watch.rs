@@ -95,7 +95,12 @@ impl ChannelWatchHandler {
         sub_map.clear();
         for (target_channel, watch_channel) in subs {
             let target_channel = from_i(target_channel);
-            let watch_channel: u64 = watch_channel.parse()?;
+            let watch_channel: u64 = match watch_channel.parse() {
+                Ok(x) => x,
+                Err(_err) => {
+                    continue
+                }
+            };
             let targets = sub_map.entry(watch_channel)
                 .or_insert_with(|| Vec::new());
             targets.push(target_channel);

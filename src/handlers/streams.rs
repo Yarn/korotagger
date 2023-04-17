@@ -5,6 +5,7 @@ use super::{ Handler, HandlerResult, HandlerError, Command };
 use crate::i_love_youtube::extract_id;
 use crate::i_love_youtube;
 use crate::twitch;
+use crate::auto_live::twitter_spaces;
 
 // use crate::DB;
 use crate::{
@@ -374,6 +375,106 @@ impl Handler for TwitchStartHandler {
             Err(err) => {
                 dbg!(err);
                 return Ok("Could not get start time from twitch".into())
+            }
+        };
+        
+        sqlx::query(r#"
+            UPDATE tags.streams
+            SET start_time = $1
+            WHERE "id" = $2
+        "#)
+            .bind(stream_start_time)
+            .bind(pg_stream_id)
+            .execute(&mut transaction).await
+            .map_err(|e| {
+                eprintln!("update start time {:?}", e);
+                HandlerError::with_message("DB error".into())
+            })?;
+        
+        sqlx::query(r#"
+            DELETE FROM tags.stream_offsets
+            USING tags.streams
+            WHERE
+                stream_offsets.stream = streams.id AND
+                streams.id = $1
+        "#)
+            .bind(pg_stream_id)
+            .execute(&mut transaction).await
+            .map_err(|e| {
+                eprintln!("update start time {:?}", e);
+                HandlerError::with_message("DB error".into())
+            })?;
+        
+        transaction.commit().await.map_err(|e| {
+            eprintln!("transaction commit {:?}", e);
+            HandlerError::with_message("DB error".into())
+        })?;
+        
+        Ok("_".into())
+    }
+}
+
+#[derive(Debug)]
+pub struct TwitterSpaceStartHandler {
+    pub pool: PgPool,
+}
+
+#[async_trait]
+impl Handler for TwitterSpaceStartHandler {
+    async fn handle_command_b(&self, command: Command<'_>) -> HandlerResult {
+        command.require_admin().await?;
+        
+        let channel_id = command.message.channel_id.0;
+        
+        let video_id: Option<String> = match command.args {
+            [] => None,
+            [name] => {
+                let name = name.trim_matches('<').trim_matches('>');
+                let video_id = twitter_spaces::extract_id(name)
+                    .ok_or(HandlerError::with_message("can not extract video id".into()))?;
+                Some(video_id)
+            }
+            _ => {
+                return Err(HandlerError::with_message("invalid parameters".into()));
+            }
+        };
+        
+        let mut transaction = self.pool.begin().await.map_err(|e| {
+            eprintln!("transaction begin {:?}", e);
+            HandlerError::with_message("DB error".into())
+        })?;
+        
+        let stream = crate::db_util::get_current_stream(&mut transaction, channel_id)
+            .await.map_err(|e| {
+                eprintln!("update start time {:?}", e);
+                HandlerError::with_message("DB error".into())
+            })?;
+        
+        let (current_stream, pg_stream_id) = match stream {
+            Some(stream) => (stream.name, stream.id),
+            None => {
+                return Ok("No active stream".into())
+            }
+        };
+        let video_id = match video_id {
+            Some(id) => id,
+            None => {
+                let stream_id = match twitter_spaces::extract_id(&current_stream) {
+                    Some(x) => x,
+                    None => {
+                        let msg = format!("can not extract video id from `{}`", current_stream);
+                        return Err(HandlerError::with_message(msg))
+                    }
+                };
+                stream_id
+            }
+        };
+        
+        let stream_start_time = match twitter_spaces::get_start_time(&video_id).await {
+            Ok(start_time) => start_time,
+            Err(err) => {
+                dbg!(err);
+                return Ok("Could not get start time from twitter".into())
             }
         };
         

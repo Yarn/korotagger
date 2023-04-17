@@ -370,6 +370,7 @@ async fn discord_stuff() {
     };
     // load to throw error early if environment variable isn't set
     let _ = &*i_love_youtube::YT_API_KEY;
+    let holodex_api_key = std::env::var("holodex_api_key").expect("environment variable holodex_api_key not set");
     
     // let pg_url = match std::env::var("pg_url") {
     //     Ok(token) => token,
@@ -438,7 +439,7 @@ async fn discord_stuff() {
         };
         
         loop {
-            let task = auto_live::holodex::auto_live_task(&task_send_handle, &mut active, &task_pool, task_d_state.clone());
+            let task = auto_live::holodex::auto_live_task(&task_send_handle, &mut active, &task_pool, task_d_state.clone(), &holodex_api_key);
             // let task = auto_stream_live::auto_live_task(&task_send_handle, &mut active, &task_pool, task_d_state.clone());
             
             match task.await {
@@ -571,7 +572,7 @@ async fn discord_stuff() {
     use handlers::tagging::{ TagsHandler, TagHandler, AdjustHandler };
     // use handlers::histogram::HistogramHandler;
     use handlers::test_handler::TestHandler;
-    use handlers::streams::{ OffsetHandler, YtStartHandler, TwitchStartHandler, SetStreamHandler };
+    use handlers::streams::{ OffsetHandler, YtStartHandler, TwitchStartHandler, TwitterSpaceStartHandler, SetStreamHandler };
     use handlers::config::{ SubscribeHandler, ManageAdminHandler };
     use handlers::jank::{ CopyTagsHandler };
     use members::handlers::{ MembersHandler, MembersAdminHandler, VerifyHandler };
@@ -588,6 +589,7 @@ async fn discord_stuff() {
     // handlers.insert("recreate", Box::new(RecreateHandler {}));
     handlers.insert("yt_start", Box::new(YtStartHandler { pool: pool.clone() }));
     handlers.insert("twitch_start", Box::new(TwitchStartHandler { pool: pool.clone() }));
+    handlers.insert("spaces_start", Box::new(TwitterSpaceStartHandler { pool: pool.clone() }));
     // handlers.insert("streams", Box::new(ListStreamsHandler { pool: pool.clone() }));
     handlers.insert("stream", Box::new(SetStreamHandler { pool: pool.clone() }));
     handlers.insert("sub", Box::new(SubscribeHandler { pool: pool.clone() }));
@@ -668,6 +670,7 @@ async fn discord_stuff() {
                 continue
             },
         };
+        // dbg!(&msg);
         
         let new_seq = discord_obj.seq();
         if new_seq != last_seq {

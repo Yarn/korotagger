@@ -7,7 +7,7 @@ use discord_lib::hyper::Uri;
 use discord_lib::hyper;
 use hyper::{Body, Method, Request};
 
-use chrono::{ DateTime, FixedOffset, Utc };
+use chrono::{ DateTime, FixedOffset };
 
 use std::collections::HashSet;
 use discord_lib::SendHandle;
@@ -33,7 +33,7 @@ struct Response {
     streams: Vec<Stream>,
 }
 
-async fn get_streams() -> anyhow::Result<Vec<Stream>> {
+async fn get_streams(api_key: &str) -> anyhow::Result<Vec<Stream>> {
     let client = discord_lib::send_message::get_client().unwrap();
     
     // https://holodex.net/api/v2/live?status=live
@@ -51,6 +51,7 @@ async fn get_streams() -> anyhow::Result<Vec<Stream>> {
         .uri(uri)
         .header("Host", "holodex.net")
         .header("Content-Type", "application/json")
+        .header("X-APIKEY", api_key)
         .body(Body::empty())
         .expect("request builder");
     
@@ -76,8 +77,8 @@ async fn get_streams() -> anyhow::Result<Vec<Stream>> {
     Ok(data.streams)
 }
 
-pub async fn auto_live_task(send_handle: &SendHandle, active: &mut HashSet<String>, pool: &sqlx::PgPool, d_state: DState) -> anyhow::Result<()> {
-    let streams = get_streams().await.context("get_streams")?;
+pub async fn auto_live_task(send_handle: &SendHandle, active: &mut HashSet<String>, pool: &sqlx::PgPool, d_state: DState, api_key: &str) -> anyhow::Result<()> {
+    let streams = get_streams(api_key).await.context("get_streams")?;
     
     let generic = streams.into_iter()
         .filter_map(|stream| {

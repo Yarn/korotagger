@@ -53,7 +53,22 @@ impl Handler for CopyTagsHandler {
             HandlerError::with_message("DB error".into())
         })?;
         
-        let in_stream = db_util::get_stream_by_name(&mut transaction, stream_name_a, Some(server_id.0), None)
+        let (stream_name_a, server_a) = match stream_name_a.rsplit_once('|') {
+            Some((name, server)) => {
+                let server: u64 = if server == "" {
+                    server_id.0
+                } else {
+                    server.parse()
+                        .map_err(|_err| HandlerError::with_message(format!("Invalid server id {}", server)))?
+                };
+                (name, server)
+            }
+            None => {
+                (stream_name_a, server_id.0)
+            }
+        };
+        
+        let in_stream = db_util::get_stream_by_name(&mut transaction, stream_name_a, Some(server_a), None)
             .await.map_err(|e| {
                 eprintln!("get stream a {:?}", e);
                 HandlerError::with_message("DB error".into())

@@ -252,7 +252,7 @@ impl Handler for TagsHandler {
         
         let jst_time = stream.start_time.assume_utc().to_offset(time::UtcOffset::hours(9));
         // let time_disp = jst_time.lazy_format("%T JST");
-        let start_timestamp = jst_time.timestamp();
+        let start_timestamp = jst_time.unix_timestamp();
         let time_disp = format!("<t:{}>", start_timestamp);
         
         let probably_link = stream.name.starts_with("http://") || stream.name.starts_with("https://");
