@@ -18,6 +18,8 @@ use crate::to_i;
 use chrono::Utc;
 // use time::Duration;
 use chrono::Duration;
+use chrono::DateTime;
+use chrono::FixedOffset;
 
 #[derive(Debug)]
 pub struct SetStreamHandler {
@@ -165,6 +167,79 @@ impl Handler for ListStreamsHandler {
         }
         
         Ok(out.into())
+    }
+}
+
+#[derive(Debug)]
+pub struct ManualStartHandler {
+    pub pool: PgPool,
+}
+
+#[async_trait]
+impl Handler for ManualStartHandler {
+    async fn handle_command_b(&self, command: Command<'_>) -> HandlerResult {
+        let channel_id = command.message.channel_id.0;
+        
+        let stream_start_time: DateTime<FixedOffset> = match command.args {
+            [dt] => {
+                DateTime::parse_from_rfc3339(*dt)
+                    .map_err(|_| HandlerError::with_message("Invalid date".into()))?
+            }
+            _ => {
+                return Err(HandlerError::with_message("invalid parameters".into()));
+            }
+        };
+        
+        let mut transaction = self.pool.begin().await.map_err(|e| {
+            eprintln!("transaction begin {:?}", e);
+            HandlerError::with_message("DB error".into())
+        })?;
+        
+        let stream = crate::db_util::get_current_stream(&mut *transaction, channel_id)
+            .await.map_err(|e| {
+                eprintln!("update start time {:?}", e);
+                HandlerError::with_message("DB error".into())
+            })?;
+        
+        let (_current_stream, pg_stream_id) = match stream {
+            Some(stream) => (stream.name, stream.id),
+            None => {
+                return Ok("No active stream".into())
+            }
+        };
+        
+        sqlx::query(r#"
+            UPDATE tags.streams
+            SET start_time = $1
+            WHERE "id" = $2
+        "#)
+            .bind(stream_start_time)
+            .bind(pg_stream_id)
+            .execute(&mut *transaction).await
+            .map_err(|e| {
+                eprintln!("update start time {:?}", e);
+                HandlerError::with_message("DB error".into())
+            })?;
+        sqlx::query(r#"
+            DELETE FROM tags.stream_offsets
+            USING tags.streams
+            WHERE
+                stream_offsets.stream = streams.id AND
+                streams.id = $1
+        "#)
+            .bind(pg_stream_id)
+            .execute(&mut *transaction).await
+            .map_err(|e| {
+                eprintln!("update start time {:?}", e);
+                HandlerError::with_message("DB error".into())
+            })?;
+        
+        transaction.commit().await.map_err(|e| {
+            eprintln!("transaction commit {:?}", e);
+            HandlerError::with_message("DB error".into())
+        })?;
+        
+        Ok("_".into())
     }
 }
 

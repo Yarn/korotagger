@@ -575,7 +575,7 @@ async fn discord_stuff() {
     use handlers::tagging::{ TagsHandler, TagHandler, AdjustHandler };
     // use handlers::histogram::HistogramHandler;
     use handlers::test_handler::TestHandler;
-    use handlers::streams::{ OffsetHandler, YtStartHandler, TwitchStartHandler, TwitterSpaceStartHandler, SetStreamHandler };
+    use handlers::streams::{ OffsetHandler, YtStartHandler, TwitchStartHandler, TwitterSpaceStartHandler, SetStreamHandler, ManualStartHandler };
     use handlers::config::{ SubscribeHandler, ManageAdminHandler };
     use handlers::jank::{ CopyTagsHandler };
     // use members::handlers::{ MembersHandler, MembersAdminHandler, VerifyHandler };
@@ -590,6 +590,7 @@ async fn discord_stuff() {
     handlers.insert("adjust", Box::new(AdjustHandler { pool: pool.clone() }));
     handlers.insert("copy_tags", Box::new(CopyTagsHandler { pool: pool.clone() }));
     // handlers.insert("recreate", Box::new(RecreateHandler {}));
+    handlers.insert("set_start", Box::new(ManualStartHandler { pool: pool.clone() }));
     handlers.insert("yt_start", Box::new(YtStartHandler { pool: pool.clone() }));
     handlers.insert("twitch_start", Box::new(TwitchStartHandler { pool: pool.clone() }));
     handlers.insert("spaces_start", Box::new(TwitterSpaceStartHandler { pool: pool.clone() }));
