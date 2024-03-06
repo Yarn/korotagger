@@ -171,9 +171,21 @@ impl Handler for TagsHandler {
                 }
             }
             stream_name => {
-                let query_server_id = match cross_server {
-                    true => None,
-                    false => Some(server_id.0),
+                let (stream_name, query_server_id) = match cross_server {
+                    true => (stream_name, None),
+                    false => {
+                        match stream_name.rsplit_once('|') {
+                            Some((stream_name, server_str)) => {
+                                let server_id: u64 = server_str.parse().map_err(
+                                    |_| {
+                                        HandlerError::with_message(format!("invalid server id {}", server_str))
+                                    }
+                                )?;
+                                (stream_name, Some(server_id))
+                            }
+                            None => (stream_name, Some(server_id.0)),
+                        }
+                    }
                 };
                 let stream = db_util::get_stream_by_name(&mut transaction, stream_name, query_server_id, Some(server_id.0))
                     .await.map_err(|e| {
@@ -825,6 +837,7 @@ impl Handler for AdjustHandler {
     async fn handle_command(&self, args: &[&str], msg: &Message) -> HandlerResult {
         // let channel_id = msg.channel_id.0;
         let user = msg.author.id.0;
+        let channel_id = msg.channel_id.0;
         
         let adjust: i64 = args.get(0)
             .and_then(|x| x.parse().ok())
@@ -855,10 +868,18 @@ impl Handler for AdjustHandler {
             SELECT tags.id
             FROM tags.tags
             WHERE
-                "user" = $1
+                "user" = $1 and
+                stream = (
+                    select selected_streams.stream
+                    from config.selected_streams
+                    where
+                        channel = $2
+                )
             ORDER BY "time" DESC
+            LIMIT 1
         "#)
             .bind(to_i(user))
+            .bind(to_i(channel_id))
             .fetch_optional(&mut transaction).await.map_err(|e| {
                 eprintln!("get tag {:?}", e);
                 HandlerError::with_message("DB error".into())
