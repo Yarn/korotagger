@@ -68,14 +68,14 @@ impl Handler for CopyTagsHandler {
             }
         };
         
-        let in_stream = db_util::get_stream_by_name(&mut transaction, stream_name_a, Some(server_a), None)
+        let in_stream = db_util::get_stream_by_name(&mut *transaction, stream_name_a, Some(server_a), None)
             .await.map_err(|e| {
                 eprintln!("get stream a {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?
             .ok_or_else(|| HandlerError::with_message("Stream a not found".into()))?;
         
-        let out_stream = db_util::get_stream_by_name(&mut transaction, stream_name_b, Some(server_id.0), None)
+        let out_stream = db_util::get_stream_by_name(&mut *transaction, stream_name_b, Some(server_id.0), None)
             .await.map_err(|e| {
                 eprintln!("get stream b {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -91,7 +91,7 @@ impl Handler for CopyTagsHandler {
         "#)
             .bind(out_stream.id)
             .bind(in_stream.id)
-            .execute(&mut transaction).await.map_err(|e| {
+            .execute(&mut *transaction).await.map_err(|e| {
                 eprintln!("insert copy tags {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?;

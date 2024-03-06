@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use discord_lib::futures::lock::Mutex;
+use futures::lock::Mutex;
 
 use anyhow::Result;
 use anyhow::anyhow;

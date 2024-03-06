@@ -181,7 +181,7 @@ impl Handler for ManageAdminHandler {
                     "#)
                         .bind(to_i(guild_id))
                         .bind(to_i(new_id))
-                        .execute(&mut transaction).await.map_err(|e| {
+                        .execute(&mut *transaction).await.map_err(|e| {
                             eprintln!("insert server admin {:?}", e);
                             HandlerError::with_message("DB error".into())
                         })?;

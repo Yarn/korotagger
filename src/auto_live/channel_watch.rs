@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use linkify::{LinkFinder, LinkKind};
 
 // use discord_lib::tokio::sync::Mutex;
-use discord_lib::tokio::sync::RwLock;
-use discord_lib::tokio::time::delay_for;
+use ::tokio::sync::RwLock;
+// use discord_lib::tokio::time::delay_for;
 
 use crate::i_love_youtube::extract_id as yt_extract_id;
 use crate::i_love_youtube::get_stream_info;
@@ -69,7 +69,7 @@ impl ChannelWatchHandler {
         
         let task_pool = pool.clone();
         
-        discord_lib::tokio::task::spawn(async move {
+        ::tokio::task::spawn(async move {
             let mut sub_map = task_sub_map;
             let pool = task_pool;
             
@@ -79,7 +79,8 @@ impl ChannelWatchHandler {
                     dbg!(err);
                 }
                 
-                delay_for(::std::time::Duration::new(300, 0)).await;
+                // delay_for(::std::time::Duration::new(300, 0)).await;
+                ::tokio::time::sleep(::std::time::Duration::new(300, 0)).await;
             }
         });
         

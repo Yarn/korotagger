@@ -1,8 +1,9 @@
 
 use std::fmt::Debug;
 use anyhow::{ Error, anyhow };
+use chrono::Duration;
 
-use discord_lib::serde_json;
+// use discord_lib::serde_json;
 
 pub trait Anyway<T, E: Debug> {
     fn anyway(self) -> Result<T, Error>;
@@ -46,4 +47,8 @@ pub fn parse_json_print_err<'a, T: serde::Deserialize<'a>>(input: &'a str) -> se
             
             err
         })
+}
+
+pub fn seconds_f64(d: f64) -> Duration {
+    Duration::microseconds((d / 1000000.0) as i64)
 }

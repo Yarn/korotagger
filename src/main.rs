@@ -3,20 +3,22 @@ use discord_lib::discord;
 // use rustbreak::Database;
 use rustbreak::FileDatabase;
 use rustbreak::deser::Ron;
-use rustbreak::error::RustbreakError;
+// use rustbreak::error::RustbreakError;
+#[allow(unused_imports)]
 use std::collections::{ HashMap, HashSet, BTreeMap, BTreeSet };
 // use std::time::SystemTime;
 use serde::{Serialize, Deserialize};
 use chrono::{ DateTime, FixedOffset };
-use discord_lib::tokio::time::delay_for;
-use discord_lib::tokio;
-use discord_lib::futures::FutureExt as _;
+// use discord_lib::tokio::time::delay_for;
+use tokio::time::sleep;
+use tokio;
+use futures::FutureExt as _;
 use std::panic::AssertUnwindSafe;
 // use discord_lib::send_message::NewMessage;
-use discord_lib::tokio::runtime::Runtime;
+use tokio::runtime::Runtime;
 
 mod auto_stream_live;
-mod auto_chooks;
+// mod auto_chooks;
 mod i_love_youtube;
 mod permissions;
 mod message_formatting;
@@ -27,12 +29,12 @@ mod bili;
 mod twitch;
 mod video_id;
 mod db_util;
-mod members;
+// mod members;
 mod util;
 mod server_settings;
 mod auto_live;
 
-use discord_lib::futures::lock::Mutex;
+use futures::lock::Mutex;
 use std::sync::Arc;
 use discord_lib::discord::Snowflake;
 use discord_lib::Channel;
@@ -58,41 +60,41 @@ struct Tag {
     adjustments: Vec<i64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Offset {
-    position: i64,
-    offset: i64,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// struct Offset {
+//     position: i64,
+//     offset: i64,
+// }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Stream {
-    tags: Vec<Tag>,
-    offsets: Vec<Offset>,
-    start_time: DateTimeF,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// struct Stream {
+//     tags: Vec<Tag>,
+//     offsets: Vec<Offset>,
+//     start_time: DateTimeF,
+// }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct State {
-    streams: HashMap<String, Stream>,
-    current_stream: HashMap<u64, String>,
-    subscriptions: HashMap<u64, Vec<String>>,
-    // session_id: Option<String>,
-    // seq: Option<u64>,
-    // self_id: Option<u64>,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// struct State {
+//     streams: HashMap<String, Stream>,
+//     current_stream: HashMap<u64, String>,
+//     subscriptions: HashMap<u64, Vec<String>>,
+//     // session_id: Option<String>,
+//     // seq: Option<u64>,
+//     // self_id: Option<u64>,
+// }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ConfigState {
-    admin_perm: HashMap<u64, BTreeSet<u64>>,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// struct ConfigState {
+//     admin_perm: HashMap<u64, BTreeSet<u64>>,
+// }
 
-impl ConfigState {
-    fn new() -> Self {
-        ConfigState {
-            admin_perm: HashMap::new(),
-        }
-    }
-}
+// impl ConfigState {
+//     fn new() -> Self {
+//         ConfigState {
+//             admin_perm: HashMap::new(),
+//         }
+//     }
+// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SessionState {
@@ -123,13 +125,13 @@ impl SessionState {
     }
 }
 
-type DatabaseInner = FileDatabase<State, Ron>;
-type ConfigStateDb = FileDatabase<ConfigState, Ron>;
+// type DatabaseInner = FileDatabase<State, Ron>;
+// type ConfigStateDb = FileDatabase<ConfigState, Ron>;
 pub(crate) type SessionStateDb = FileDatabase<SessionState, Ron>;
 
 struct Database {
-    inner: DatabaseInner,
-    config_state: ConfigStateDb,
+    // inner: DatabaseInner,
+    // config_state: ConfigStateDb,
     session_state: SessionStateDb,
 }
 
@@ -166,13 +168,13 @@ impl Database {
     //     Ok(())
     // }
     
-    fn load_all(&self) -> Result<(), RustbreakError> {
-        self.config_state.load()?;
-        self.inner.load()?;
-        self.session_state.load()?;
+    // fn load_all(&self) -> Result<(), RustbreakError> {
+    //     self.config_state.load()?;
+    //     self.inner.load()?;
+    //     self.session_state.load()?;
         
-        Ok(())
-    }
+    //     Ok(())
+    // }
     
     // fn try_load_all(&self) -> Result<(), RustbreakError> {
     //     let _ = self.config_state.load();
@@ -183,31 +185,31 @@ impl Database {
     // }
 }
 
-impl std::ops::Deref for Database {
-    type Target = DatabaseInner;
+// impl std::ops::Deref for Database {
+//     type Target = DatabaseInner;
     
-    fn deref(&self) -> &DatabaseInner {
-        &self.inner
-    }
-}
+//     fn deref(&self) -> &DatabaseInner {
+//         &self.inner
+//     }
+// }
 
 fn get_db() -> Database {
-    let new_data = State {
-        streams: HashMap::new(),
-        current_stream: HashMap::new(),
-        subscriptions: HashMap::new(),
-        // session_id: None,
-        // seq: None,
-        // self_id: None,
-    };
+    // let new_data = State {
+    //     streams: HashMap::new(),
+    //     current_stream: HashMap::new(),
+    //     subscriptions: HashMap::new(),
+    //     // session_id: None,
+    //     // seq: None,
+    //     // self_id: None,
+    // };
     // new_data.streams.insert("".into(), Stream {
     //     tags: Vec::new(),
     //     start_time: SystemTime::now(),
     // });
     
     // Database::open("./database.ron").unwrap()
-    let db = FileDatabase::from_path("./kq_db.ron", new_data).unwrap();
-    let config_db = FileDatabase::from_path("./kq_config.ron", ConfigState::new()).unwrap();
+    // let db: DatabaseInner = FileDatabase::from_path("./kq_db.ron", new_data).unwrap();
+    // let config_db = FileDatabase::from_path("./kq_config.ron", ConfigState::new()).unwrap();
     let session_db = FileDatabase::from_path("./kq_session.ron", SessionState::new()).unwrap();
     // match db.load() {
     //     Ok(()) => (),
@@ -217,8 +219,8 @@ fn get_db() -> Database {
     //     }
     // }
     Database {
-        inner: db,
-        config_state: config_db,
+        // inner: db,
+        // config_state: config_db,
         session_state: session_db,
     }
 }
@@ -428,7 +430,7 @@ async fn discord_stuff() {
     let task_d_state = d_state.clone();
     // let task = auto_stream_live::auto_live_task(send_handle);
     // let _task_handle = discord_lib::tokio::task::spawn(task);
-    let _task_handle = discord_lib::tokio::task::spawn(async move {
+    let _task_handle = tokio::task::spawn(async move {
         let session_state = task_session_state;
         // let mut active: HashSet<String> = HashSet::new();
         let mut active = {
@@ -460,77 +462,78 @@ async fn discord_stuff() {
                 }
             }
             
-            delay_for(::std::time::Duration::new(30, 0)).await;
+            // delay_for(::std::time::Duration::new(30, 0)).await;
+            sleep(::std::time::Duration::new(30, 0)).await;
         }
     });
     
-    let task_send_handle = send_handle.clone();
-    let task_pool = pool.clone();
-    let task_session_state = Arc::clone(&session_state);
-    let task_d_state = d_state.clone();
+    // let task_send_handle = send_handle.clone();
+    // let task_pool = pool.clone();
+    // let task_session_state = Arc::clone(&session_state);
+    // let task_d_state = d_state.clone();
     // let task = auto_stream_live::auto_live_task(send_handle);
     // let _task_handle = discord_lib::tokio::task::spawn(task);
-    if false {
-        let _task_handle = discord_lib::tokio::task::spawn(async move {
-            let session_state = task_session_state;
-            // let mut active: HashSet<String> = HashSet::new();
-            let mut active = {
-                let data = session_state.borrow_data().unwrap();
+    // if false {
+    //     let _task_handle = discord_lib::tokio::task::spawn(async move {
+    //         let session_state = task_session_state;
+    //         // let mut active: HashSet<String> = HashSet::new();
+    //         let mut active = {
+    //             let data = session_state.borrow_data().unwrap();
                 
-                data.chooks_active.clone()
-                // data.active = active.clone();
-            };
+    //             data.chooks_active.clone()
+    //             // data.active = active.clone();
+    //         };
             
-            loop {
-                use auto_chooks::run_chooks;
-                let task = run_chooks(&mut active, &task_send_handle, &task_pool, task_d_state.clone());
-                match task.await {
-                    Ok(()) => {
-                        // println!("active save start");
-                        // delay_for(::std::time::Duration::new(30, 0)).await;
-                        {
-                            let mut data = session_state.borrow_data_mut().unwrap();
+    //         loop {
+    //             use auto_chooks::run_chooks;
+    //             let task = run_chooks(&mut active, &task_send_handle, &task_pool, task_d_state.clone());
+    //             match task.await {
+    //                 Ok(()) => {
+    //                     // println!("active save start");
+    //                     // delay_for(::std::time::Duration::new(30, 0)).await;
+    //                     {
+    //                         let mut data = session_state.borrow_data_mut().unwrap();
                             
-                            data.chooks_active = active.clone();
-                        }
-                        // db.async_save_session().await.unwrap();
-                        session_state.save().unwrap();
-                        // println!("active save end");
-                    },
-                    Err(err) => {
-                        eprintln!("auto chooks task failed {:?}", err);
-                    }
-                }
+    //                         data.chooks_active = active.clone();
+    //                     }
+    //                     // db.async_save_session().await.unwrap();
+    //                     session_state.save().unwrap();
+    //                     // println!("active save end");
+    //                 },
+    //                 Err(err) => {
+    //                     eprintln!("auto chooks task failed {:?}", err);
+    //                 }
+    //             }
                 
-                delay_for(::std::time::Duration::new(30, 0)).await;
-            }
-        });
-    }
+    //             delay_for(::std::time::Duration::new(30, 0)).await;
+    //         }
+    //     });
+    // }
     
-    if false { // disable membership job
-        let task_send_handle = send_handle.clone();
-        let task_pool = pool.clone();
-        let task_session_db = session_state.clone();
-        let _task_handle = discord_lib::tokio::task::spawn(async move {
-            // let mut active: HashSet<String> = HashSet::new();
+    // if false { // disable membership job
+    //     let task_send_handle = send_handle.clone();
+    //     let task_pool = pool.clone();
+    //     let task_session_db = session_state.clone();
+    //     let _task_handle = discord_lib::tokio::task::spawn(async move {
+    //         // let mut active: HashSet<String> = HashSet::new();
             
-            loop {
-                let task = crate::members::bg_task::
-                    member_task(
-                        task_session_db.clone(),
-                        task_pool.clone(),
-                        task_send_handle.clone(),
-                    );
-                match task.await {
-                    Ok(()) => (),
-                    Err(err) => {
-                        eprintln!("member update task failed {:?}", err);
-                    }
-                }
-                delay_for(::std::time::Duration::new(240, 0)).await;
-            }
-        });
-    }
+    //         loop {
+    //             let task = crate::members::bg_task::
+    //                 member_task(
+    //                     task_session_db.clone(),
+    //                     task_pool.clone(),
+    //                     task_send_handle.clone(),
+    //                 );
+    //             match task.await {
+    //                 Ok(()) => (),
+    //                 Err(err) => {
+    //                     eprintln!("member update task failed {:?}", err);
+    //                 }
+    //             }
+    //             delay_for(::std::time::Duration::new(240, 0)).await;
+    //         }
+    //     });
+    // }
     
     // let _task_handle = discord_lib::tokio::task::spawn(async move {
     
@@ -575,7 +578,7 @@ async fn discord_stuff() {
     use handlers::streams::{ OffsetHandler, YtStartHandler, TwitchStartHandler, TwitterSpaceStartHandler, SetStreamHandler };
     use handlers::config::{ SubscribeHandler, ManageAdminHandler };
     use handlers::jank::{ CopyTagsHandler };
-    use members::handlers::{ MembersHandler, MembersAdminHandler, VerifyHandler };
+    // use members::handlers::{ MembersHandler, MembersAdminHandler, VerifyHandler };
     use auto_live::channel_watch::ChannelWatchHandler;
     // use help_text::HelpHandler;
     
@@ -594,9 +597,9 @@ async fn discord_stuff() {
     handlers.insert("stream", Box::new(SetStreamHandler { pool: pool.clone() }));
     handlers.insert("sub", Box::new(SubscribeHandler { pool: pool.clone() }));
     handlers.insert("admin", Box::new(ManageAdminHandler { pool: pool.clone() }));
-    handlers.insert("members", Box::new(MembersHandler { pool: pool.clone() }));
-    handlers.insert("membersa", Box::new(MembersAdminHandler { pool: pool.clone() }));
-    handlers.insert("verify", Box::new(VerifyHandler { pool: pool.clone() }));
+    // handlers.insert("members", Box::new(MembersHandler { pool: pool.clone() }));
+    // handlers.insert("membersa", Box::new(MembersAdminHandler { pool: pool.clone() }));
+    // handlers.insert("verify", Box::new(VerifyHandler { pool: pool.clone() }));
     
     handlers.insert("watch_channel", Box::new(ChannelWatchHandler::new(pool.clone(), d_state.clone())));
     
@@ -660,7 +663,7 @@ async fn discord_stuff() {
                         Err(err) => {
                             println!("Could not re-establish connection ({}s): {:?}", wait_secs, err);
                             // use discord_lib::tokio::time::delay_for;
-                            delay_for(::std::time::Duration::new(wait_secs, 0)).await;
+                            sleep(::std::time::Duration::new(wait_secs, 0)).await;
                             if wait_secs < 20 {
                                 wait_secs *= 2;
                             }
@@ -1388,7 +1391,7 @@ async fn mark_migrated(version: i64) -> Result<(), sqlx::Error> {
         .bind(version)
         .bind(&*migration.description)
         .bind(&*migration.checksum)
-        .execute(&mut transaction).await?;
+        .execute(&mut *transaction).await?;
     
     transaction.commit().await?;
     
@@ -1437,146 +1440,7 @@ async fn mark_migrated(version: i64) -> Result<(), sqlx::Error> {
     
 // }
 
-use sqlx::postgres::PgArguments;
 
-struct BulkInsert {
-    query_str: String,
-    // query: Query<'q>,
-    args: PgArguments,
-    arg_n: usize,
-}
-
-impl BulkInsert {
-    fn new(part: &str) -> Self {
-        let mut query_str = String::new();
-        query_str.push_str(r#"INSERT INTO "#);
-        query_str.push_str(part);
-        query_str.push_str(r#" VALUES ("#);
-        
-        
-        Self {
-            query_str,
-            args: PgArguments::default(),
-            arg_n: 1,
-        }
-    }
-    
-    // fn insert2<'a, T1: 'a, T2: 'a>(&'a mut self, value: T1, value2: T2) 
-    //     where
-    //         T1: sqlx::prelude::Encode<'a, sqlx::Postgres> + sqlx::prelude::Type<sqlx::Postgres> + Send,
-    //         T2: sqlx::prelude::Encode<'a, sqlx::Postgres> + sqlx::prelude::Type<sqlx::Postgres> + Send,
-    // {
-    //     self.query_str.push_str(&format!("(${}, ${}),", self.arg_n, self.arg_n+1));
-    //     use sqlx::Arguments;
-    //     self.args.add(value);
-    //     self.args.add(value2);
-    //     self.arg_n += 2;
-    // }
-    
-    fn add<'a, T: 'a>(&'a mut self, value: T)
-        where
-            T: sqlx::prelude::Encode<'a, sqlx::Postgres> + sqlx::prelude::Type<sqlx::Postgres> + Send,
-    {
-        self.query_str.push_str(&format!("${},", self.arg_n));
-        use sqlx::Arguments;
-        self.args.add(value);
-        
-        self.arg_n += 1;
-    }
-    
-    fn row(&mut self) {
-        if self.query_str.ends_with('(') {
-            return
-        }
-        self.finish_row();
-        self.query_str.push('(');
-    }
-    
-    fn finish_row(&mut self) {
-        if self.query_str.ends_with(',') {
-            self.query_str.pop();
-        }
-        
-        self.query_str.push_str("),");
-    }
-    
-    // async fn run(mut self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error>
-    async fn run<'c, E>(mut self, pool: E) -> Result<(), sqlx::Error>
-        where
-            E: sqlx::prelude::Executor<'c, Database = sqlx::Postgres>
-    {
-        
-        self.finish_row();
-        if self.query_str.ends_with(',') {
-            self.query_str.pop();
-        }
-        
-        // println!("{}", self.query_str);
-        // self.query_str.push_str(r#" RETURNING id"#);
-        
-        let query = sqlx::query_with(&self.query_str, self.args);
-        
-        query.execute(pool).await?;
-        // use discord_lib::futures::StreamExt;
-        // let res: Vec<_> = query.fetch(pool).collect::<Vec<_>>().await;
-        // use sqlx::Row;
-        // let res: Result<Vec<_>, _> = res.into_iter().collect();
-        // let x = res?;
-        // // println!("{:?}", x.columns());
-        // for x in x.iter() {
-        // //     // let x = x?;
-        // //     // if let Ok(x) = x {
-        //     println!("{:?}", x.columns());
-        // //     // }
-        // }
-        // println!("{:?}", res);
-        
-        Ok(())
-    }
-    
-    // async fn run_returning<'c, E, T>(mut self, pool: E) -> Result<Vec<T>, sqlx::Error>
-    async fn run_returning<'c, E>(mut self, pool: E) -> Result<Vec<sqlx::postgres::PgRow>, sqlx::Error>
-        where
-            E: sqlx::prelude::Executor<'c, Database = sqlx::Postgres>,
-            // T: sqlx::Decode<'_, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Clone
-    {
-        
-        self.finish_row();
-        if self.query_str.ends_with(',') {
-            self.query_str.pop();
-        }
-        
-        self.query_str.push_str(r#" RETURNING id, time"#);
-        
-        let query = sqlx::query_with(&self.query_str, self.args);
-        
-        // query.execute(pool).await?;
-        use discord_lib::futures::StreamExt;
-        let res: Vec<_> = query.fetch(pool).collect::<Vec<_>>().await;
-        // use sqlx::Row;
-        let res: Result<Vec<_>, _> = res.into_iter().collect();
-        let x = res?;
-        // println!("{:?}", x.columns());
-        // for x in x.iter() {
-        // //     // let x = x?;
-        // //     // if let Ok(x) = x {
-        //     // println!("{:?}", x.columns());
-        // //     // }
-        // }
-        // println!("{:?}", res);
-        
-        // use std::convert::TryInto;
-        let out = x;
-        // let mut out: Vec<T> = Vec::new();
-        // for y in x {
-        //     let z: T = y.try_get(0)?;
-        //     // let z = y.into(0);
-        //     out.push(z.clone());
-        // }
-        
-        Ok(out)
-    }
-}
 
 fn to_i(x: u64) -> i64 {
     i64::from_be_bytes(x.to_be_bytes())
@@ -1586,201 +1450,201 @@ fn from_i(x: i64) -> u64 {
     u64::from_be_bytes(x.to_be_bytes())
 }
 
-async fn migrate_ron() -> Result<(), sqlx::Error> {
+// async fn migrate_ron() -> Result<(), sqlx::Error> {
     
-    let db = get_db();
+//     let db = get_db();
     
-    let pool = get_pool().await.unwrap();
+//     let pool = get_pool().await.unwrap();
     
-    // Make a simple query to return the given parameter
-    // let row: (i64,) = sqlx::query_as("SELECT $1")
-    //     .bind(150_i64)
-    //     .fetch_one(&pool).await?;
+//     // Make a simple query to return the given parameter
+//     // let row: (i64,) = sqlx::query_as("SELECT $1")
+//     //     .bind(150_i64)
+//     //     .fetch_one(&pool).await?;
     
-    // assert_eq!(row.0, 150);
+//     // assert_eq!(row.0, 150);
     
-    // let row: (i32, String) = sqlx::query_as(r#"SELECT id, "group"  FROM sensors_1 "#)
-    //     // .bind(150_i64)
-    //     .fetch_one(&pool).await?;
+//     // let row: (i32, String) = sqlx::query_as(r#"SELECT id, "group"  FROM sensors_1 "#)
+//     //     // .bind(150_i64)
+//     //     .fetch_one(&pool).await?;
     
-    // assert_eq!(row.1, "test1");
+//     // assert_eq!(row.1, "test1");
     
-    db.load_all().unwrap();
-    let data = db.borrow_data().unwrap();
-    let config_data = db.config_state.borrow_data().unwrap();
+//     db.load_all().unwrap();
+//     let data = db.borrow_data().unwrap();
+//     let config_data = db.config_state.borrow_data().unwrap();
     
-    // let insert_stream = sqlx::query!(r#"INSERT INTO tags.streams (name, start_time) VALUES ($1, $2)"#);
+//     // let insert_stream = sqlx::query!(r#"INSERT INTO tags.streams (name, start_time) VALUES ($1, $2)"#);
     
-    // bulk_query(&pool, &mut data.streams.iter(), |query, x| {
-    //     query
-    //         .bind(x.0)
-    //         .bind(x.1.start_time)
-    // }).await?;
+//     // bulk_query(&pool, &mut data.streams.iter(), |query, x| {
+//     //     query
+//     //         .bind(x.0)
+//     //         .bind(x.1.start_time)
+//     // }).await?;
     
-    let mut transaction = pool.begin().await?;
+//     let mut transaction = pool.begin().await?;
     
-    let mut stream_insert = BulkInsert::new("tags.streams (name, has_server, server, start_time)");
-    for (stream_name, stream) in data.streams.iter() {
-        stream_insert.row();
-        stream_insert.add(stream_name);
-        stream_insert.add(false);
-        stream_insert.add(0);
-        stream_insert.add(stream.start_time);
-    }
-    stream_insert.run(&mut transaction).await?;
+//     let mut stream_insert = BulkInsert::new("tags.streams (name, has_server, server, start_time)");
+//     for (stream_name, stream) in data.streams.iter() {
+//         stream_insert.row();
+//         stream_insert.add(stream_name);
+//         stream_insert.add(false);
+//         stream_insert.add(0);
+//         stream_insert.add(stream.start_time);
+//     }
+//     stream_insert.run(&mut transaction).await?;
     
     
-    for (stream_name, stream) in data.streams.iter() {//.filter(|(_, s)| !s.tags.is_empty()).take(100) {
-        if !stream.tags.is_empty() {
-            println!("a1");
-            let (stream_id,): (i32,) = sqlx::query_as(r#"SELECT id FROM tags.streams WHERE name = $1"#)
-                .bind(stream_name)
-                .fetch_one(&mut transaction).await?;
-            println!("a2");
+//     for (stream_name, stream) in data.streams.iter() {//.filter(|(_, s)| !s.tags.is_empty()).take(100) {
+//         if !stream.tags.is_empty() {
+//             println!("a1");
+//             let (stream_id,): (i32,) = sqlx::query_as(r#"SELECT id FROM tags.streams WHERE name = $1"#)
+//                 .bind(stream_name)
+//                 .fetch_one(&mut transaction).await?;
+//             println!("a2");
             
-            for (i, offset) in stream.offsets.iter().enumerate() {
-                // dbg!(&offset);
-                // println!("a");
-                // let x = chrono::Duration::seconds(offset.position);
-                // dbg!(&x);
-                // println!("b");
-                // let y = chrono::Duration::seconds(offset.offset);
-                // dbg!(&y);
-                // println!("c");
+//             for (i, offset) in stream.offsets.iter().enumerate() {
+//                 // dbg!(&offset);
+//                 // println!("a");
+//                 // let x = chrono::Duration::seconds(offset.position);
+//                 // dbg!(&x);
+//                 // println!("b");
+//                 // let y = chrono::Duration::seconds(offset.offset);
+//                 // dbg!(&y);
+//                 // println!("c");
                 
-                // let x = time::Duration::seconds(offset.position);
-                // let y = time::Duration::seconds(offset.offset);
+//                 // let x = time::Duration::seconds(offset.position);
+//                 // let y = time::Duration::seconds(offset.offset);
                 
-                sqlx::query(r#"INSERT INTO tags.stream_offsets ("order", stream, position, "offset") VALUES ($1, $2, $3, $4)"#)
-                    .bind(i as i32)
-                    .bind(stream_id)
-                    .bind(time::Duration::seconds(offset.position))
-                    .bind(time::Duration::seconds(offset.offset))
-                    // .bind(chrono::Duration::seconds(offset.position))
-                    // .bind(chrono::Duration::seconds(offset.offset))
-                    .execute(&mut transaction).await?;
+//                 sqlx::query(r#"INSERT INTO tags.stream_offsets ("order", stream, position, "offset") VALUES ($1, $2, $3, $4)"#)
+//                     .bind(i as i32)
+//                     .bind(stream_id)
+//                     .bind(time::Duration::seconds(offset.position))
+//                     .bind(time::Duration::seconds(offset.offset))
+//                     // .bind(chrono::Duration::seconds(offset.position))
+//                     // .bind(chrono::Duration::seconds(offset.offset))
+//                     .execute(&mut transaction).await?;
                 
-                println!("d");
-            }
+//                 println!("d");
+//             }
             
-            let mut tag_insert = BulkInsert::new(r#"tags.tags (stream, "name", "time", "server", "user", message_id, votes, deleted)"#);
-            for tag in stream.tags.iter() {
-                // println!("{:?}", tag.time.naive_utc());
+//             let mut tag_insert = BulkInsert::new(r#"tags.tags (stream, "name", "time", "server", "user", message_id, votes, deleted)"#);
+//             for tag in stream.tags.iter() {
+//                 // println!("{:?}", tag.time.naive_utc());
                 
-                tag_insert.row();
-                tag_insert.add(stream_id);
-                tag_insert.add(&tag.name);
-                tag_insert.add(&tag.time.naive_utc());
-                tag_insert.add(None::<i64>);
-                tag_insert.add(to_i(tag.user));
-                tag_insert.add(to_i(tag.message_id));
-                tag_insert.add(tag.votes as i32);
-                tag_insert.add(tag.deleted);
-            }
-            let res: Vec<_> = tag_insert.run_returning(&mut transaction).await?;
-            println!("after run returning");
-            use sqlx::Row;
-            // let x: i32 = res[0].try_get(0)?;
+//                 tag_insert.row();
+//                 tag_insert.add(stream_id);
+//                 tag_insert.add(&tag.name);
+//                 tag_insert.add(&tag.time.naive_utc());
+//                 tag_insert.add(None::<i64>);
+//                 tag_insert.add(to_i(tag.user));
+//                 tag_insert.add(to_i(tag.message_id));
+//                 tag_insert.add(tag.votes as i32);
+//                 tag_insert.add(tag.deleted);
+//             }
+//             let res: Vec<_> = tag_insert.run_returning(&mut transaction).await?;
+//             println!("after run returning");
+//             use sqlx::Row;
+//             // let x: i32 = res[0].try_get(0)?;
             
-            use chrono::Timelike;
-            use chrono::naive::NaiveDateTime;
+//             use chrono::Timelike;
+//             use chrono::naive::NaiveDateTime;
             
-            let res: Result<Vec<(i32, NaiveDateTime)>, sqlx::Error> = res.iter().map(|r| Ok((r.try_get(0)?, r.try_get(1)?))).collect();
-            println!("row got");
-            let res = res?;
-            println!("row good");
+//             let res: Result<Vec<(i32, NaiveDateTime)>, sqlx::Error> = res.iter().map(|r| Ok((r.try_get(0)?, r.try_get(1)?))).collect();
+//             println!("row got");
+//             let res = res?;
+//             println!("row good");
             
-            assert_eq!(stream.tags.len(), res.len());
-            for (tag, (tag_id, tag_time)) in stream.tags.iter().zip(res.iter()) {
-                assert_eq!(tag.time.naive_utc().with_nanosecond(0), tag_time.with_nanosecond(0));
-                for (i, adj) in tag.adjustments.iter().enumerate() {
-                    sqlx::query(r#"INSERT INTO tags.tag_offsets ("order", tag, "offset") VALUES ($1, $2, $3)"#)
-                        .bind(i as i32)
-                        .bind(tag_id)
-                        .bind(time::Duration::seconds(*adj))
-                        .execute(&mut transaction).await?;
-                }
-            }
-        }
-    }
+//             assert_eq!(stream.tags.len(), res.len());
+//             for (tag, (tag_id, tag_time)) in stream.tags.iter().zip(res.iter()) {
+//                 assert_eq!(tag.time.naive_utc().with_nanosecond(0), tag_time.with_nanosecond(0));
+//                 for (i, adj) in tag.adjustments.iter().enumerate() {
+//                     sqlx::query(r#"INSERT INTO tags.tag_offsets ("order", tag, "offset") VALUES ($1, $2, $3)"#)
+//                         .bind(i as i32)
+//                         .bind(tag_id)
+//                         .bind(time::Duration::seconds(*adj))
+//                         .execute(&mut transaction).await?;
+//                 }
+//             }
+//         }
+//     }
     
-    for (channel_id, stream_name) in data.current_stream.iter() {
-        sqlx::query(r#"
-            INSERT INTO config.selected_streams (channel, stream) VALUES (
-                $1,
-                (
-                    SELECT "id" FROM tags.streams WHERE name=$2
-                )
-            )
-            ON CONFLICT DO NOTHING;
-        "#)
-            .bind(to_i(*channel_id))
-            .bind(stream_name)
-            .execute(&mut transaction).await?;
-    }
+//     for (channel_id, stream_name) in data.current_stream.iter() {
+//         sqlx::query(r#"
+//             INSERT INTO config.selected_streams (channel, stream) VALUES (
+//                 $1,
+//                 (
+//                     SELECT "id" FROM tags.streams WHERE name=$2
+//                 )
+//             )
+//             ON CONFLICT DO NOTHING;
+//         "#)
+//             .bind(to_i(*channel_id))
+//             .bind(stream_name)
+//             .execute(&mut transaction).await?;
+//     }
     
-    for (channel_id, yt_channel_ids) in data.subscriptions.iter() {
-        for yt_channel_id in yt_channel_ids.iter() {
-            sqlx::query(r#"
-                INSERT INTO config.subscriptions (channel, sub_id, "type") VALUES (
-                    $1,
-                    $2,
-                    'youtube'
-                )
-                ON CONFLICT DO NOTHING;
-            "#)
-                .bind(to_i(*channel_id))
-                .bind(yt_channel_id)
-                .execute(&mut transaction).await?;
-        }
-    }
+//     for (channel_id, yt_channel_ids) in data.subscriptions.iter() {
+//         for yt_channel_id in yt_channel_ids.iter() {
+//             sqlx::query(r#"
+//                 INSERT INTO config.subscriptions (channel, sub_id, "type") VALUES (
+//                     $1,
+//                     $2,
+//                     'youtube'
+//                 )
+//                 ON CONFLICT DO NOTHING;
+//             "#)
+//                 .bind(to_i(*channel_id))
+//                 .bind(yt_channel_id)
+//                 .execute(&mut transaction).await?;
+//         }
+//     }
     
-    for (server_id, admins) in config_data.admin_perm.iter() {
-        for admin in admins {
-            sqlx::query(r#"
-                INSERT INTO config.server_admins (server, "group", readable) VALUES (
-                    $1,
-                    $2,
-                    NULL
-                )
-                ON CONFLICT DO NOTHING;
-            "#)
-                .bind(to_i(*server_id))
-                .bind(to_i(*admin))
-                .execute(&mut transaction).await?;
-        }
-    }
+//     for (server_id, admins) in config_data.admin_perm.iter() {
+//         for admin in admins {
+//             sqlx::query(r#"
+//                 INSERT INTO config.server_admins (server, "group", readable) VALUES (
+//                     $1,
+//                     $2,
+//                     NULL
+//                 )
+//                 ON CONFLICT DO NOTHING;
+//             "#)
+//                 .bind(to_i(*server_id))
+//                 .bind(to_i(*admin))
+//                 .execute(&mut transaction).await?;
+//         }
+//     }
     
-    transaction.commit().await?;
+//     transaction.commit().await?;
     
-    // let mut query = String::new();
-    // query.push_str(r#"INSERT INTO tags.streams (name, start_time) VALUES"#);
+//     // let mut query = String::new();
+//     // query.push_str(r#"INSERT INTO tags.streams (name, start_time) VALUES"#);
     
-    // let mut i = 1usize;
-    // for _ in data.streams.iter() {
-    //     if i != 1 {
-    //         query.push(',');
-    //     }
-    //     query.push_str(&format!(" (${}, ${})", i, i+1));
-    //     i += 2;
-    // }
+//     // let mut i = 1usize;
+//     // for _ in data.streams.iter() {
+//     //     if i != 1 {
+//     //         query.push(',');
+//     //     }
+//     //     query.push_str(&format!(" (${}, ${})", i, i+1));
+//     //     i += 2;
+//     // }
     
-    // let mut query = sqlx::query(&query);
+//     // let mut query = sqlx::query(&query);
     
-    // for (stream_name, stream) in data.streams.iter() {
-    //     println!("{}", stream_name);
+//     // for (stream_name, stream) in data.streams.iter() {
+//     //     println!("{}", stream_name);
         
-    //     query = query.bind(stream_name).bind(stream.start_time);
-    //     // sqlx::query(r#"INSERT INTO tags.streams (name, start_time) VALUES ($1, $2)"#)
-    //     // // insert_stream
-    //     //     .bind(stream_name)
-    //     //     .bind(stream.start_time)
-    //     //     .execute(&pool).await?;
-    // }
-    // query.execute(&pool).await?;
+//     //     query = query.bind(stream_name).bind(stream.start_time);
+//     //     // sqlx::query(r#"INSERT INTO tags.streams (name, start_time) VALUES ($1, $2)"#)
+//     //     // // insert_stream
+//     //     //     .bind(stream_name)
+//     //     //     .bind(stream.start_time)
+//     //     //     .execute(&pool).await?;
+//     // }
+//     // query.execute(&pool).await?;
     
-    Ok(())
-}
+//     Ok(())
+// }
 
 async fn manage_admin(op: &str, user: u64) -> Result<(), sqlx::Error> {
     let pool = get_pool().await.unwrap();
@@ -1868,45 +1732,45 @@ fn main() {
             
             return
         }
-        Some("test_gentai") => {
-            let slug = args.next().unwrap();
+        // Some("test_gentai") => {
+        //     let slug = args.next().unwrap();
             
-            let mut rt = Runtime::new().unwrap();
+        //     let mut rt = Runtime::new().unwrap();
             
-            let data = rt.block_on(
-                members::gentai::get_members(&slug)
-            ).unwrap();
-            println!("{:#?}", data);
+        //     let data = rt.block_on(
+        //         members::gentai::get_members(&slug)
+        //     ).unwrap();
+        //     println!("{:#?}", data);
             
-            return
-        }
+        //     return
+        // }
         Some("migrate") => {
             // use discord_lib::tokio::runtime::Runtime;
-            let mut rt = Runtime::new().unwrap();
+            let rt = Runtime::new().unwrap();
             rt.block_on(migrate()).unwrap();
             // migrate();
             return
         }
         Some("mark_migrated") => {
-            let mut rt = Runtime::new().unwrap();
+            let rt = Runtime::new().unwrap();
             let version: i64 = args.next().unwrap().parse().unwrap();
             rt.block_on(mark_migrated(version)).unwrap();
             return
         }
-        Some("migrate_ron") => {
-            // use discord_lib::tokio::runtime::Runtime;
-            let mut rt = Runtime::new().unwrap();
-            rt.block_on(migrate()).unwrap();
-            rt.block_on(migrate_ron()).unwrap();
-            // migrate();
-            return
-        }
+        // Some("migrate_ron") => {
+        //     // use discord_lib::tokio::runtime::Runtime;
+        //     let rt = Runtime::new().unwrap();
+        //     rt.block_on(migrate()).unwrap();
+        //     rt.block_on(migrate_ron()).unwrap();
+        //     // migrate();
+        //     return
+        // }
         Some("admin") => {
             let op = args.next().unwrap();
             let user: u64 = args.next().unwrap().parse().unwrap();
             
             // use discord_lib::tokio::runtime::Runtime;
-            let mut rt = Runtime::new().unwrap();
+            let rt = Runtime::new().unwrap();
             rt.block_on(manage_admin(&op, user)).unwrap();
             return
         }
@@ -1922,6 +1786,6 @@ fn main() {
     // discord_lib::jank_run(discord_stuff());
     // discord_lib::tokio::block_on(discord_stuff());
     // use discord_lib::tokio::runtime::Runtime;
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     rt.block_on(discord_stuff());
 }

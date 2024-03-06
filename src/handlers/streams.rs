@@ -8,15 +8,16 @@ use crate::twitch;
 use crate::auto_live::twitter_spaces;
 
 // use crate::DB;
-use crate::{
-    Offset,
-    Stream,
-};
+// use crate::{
+//     Offset,
+//     Stream,
+// };
 use sqlx::PgPool;
 use crate::to_i;
 // use crate::DateTimeF;
 use chrono::Utc;
-use time::Duration;
+// use time::Duration;
+use chrono::Duration;
 
 #[derive(Debug)]
 pub struct SetStreamHandler {
@@ -38,11 +39,12 @@ impl Handler for SetStreamHandler {
             None => stream_name.to_string()
         };
         
-        let stream = Stream {
-            tags: Vec::new(),
-            offsets: vec![Offset { position: 0, offset: -20 }],
-            start_time: Utc::now().into(),
-        };
+        // let stream = Stream {
+        //     tags: Vec::new(),
+        //     offsets: vec![Offset { position: 0, offset: -20 }],
+        //     start_time: Utc::now().into(),
+        // };
+        let start_time: chrono::NaiveDateTime = Utc::now().naive_utc();
         
         let ref server_id = command.message.guild_id.as_ref()
             .ok_or(HandlerError::with_message("Not in a server".into()))?;
@@ -60,7 +62,7 @@ impl Handler for SetStreamHandler {
         "#)
             .bind(&stream_name)
             .bind(to_i(server_id.0))
-            .fetch_optional(&mut transaction).await
+            .fetch_optional(&mut *transaction).await
             .map_err(|e| {
                 eprintln!("find stream {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -82,8 +84,8 @@ impl Handler for SetStreamHandler {
                     .bind(to_i(server_id.0))
                     // .bind(None::<String>)
                     // .bind(&live.title)
-                    .bind(stream.start_time)
-                    .fetch_one(&mut transaction).await
+                    .bind(start_time)
+                    .fetch_one(&mut *transaction).await
                     .map_err(|e| {
                         eprintln!("create stream {:?}", e);
                         HandlerError::with_message("DB error".into())
@@ -104,7 +106,7 @@ impl Handler for SetStreamHandler {
         "#)
             .bind(to_i(channel_id))
             .bind(stream_id)
-            .execute(&mut transaction).await
+            .execute(&mut *transaction).await
             .map_err(|e| {
                 eprintln!("set selected stream {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -213,7 +215,7 @@ impl Handler for YtStartHandler {
         //     }
         // };
         
-        let stream = crate::db_util::get_current_stream(&mut transaction, channel_id)
+        let stream = crate::db_util::get_current_stream(&mut *transaction, channel_id)
             .await.map_err(|e| {
                 eprintln!("update start time {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -249,7 +251,7 @@ impl Handler for YtStartHandler {
         "#)
             .bind(stream_start_time)
             .bind(pg_stream_id)
-            .execute(&mut transaction).await
+            .execute(&mut *transaction).await
             .map_err(|e| {
                 eprintln!("update start time {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -291,7 +293,7 @@ impl Handler for YtStartHandler {
                 streams.id = $1
         "#)
             .bind(pg_stream_id)
-            .execute(&mut transaction).await
+            .execute(&mut *transaction).await
             .map_err(|e| {
                 eprintln!("update start time {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -344,7 +346,7 @@ impl Handler for TwitchStartHandler {
             HandlerError::with_message("DB error".into())
         })?;
         
-        let stream = crate::db_util::get_current_stream(&mut transaction, channel_id)
+        let stream = crate::db_util::get_current_stream(&mut *transaction, channel_id)
             .await.map_err(|e| {
                 eprintln!("update start time {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -385,7 +387,7 @@ impl Handler for TwitchStartHandler {
         "#)
             .bind(stream_start_time)
             .bind(pg_stream_id)
-            .execute(&mut transaction).await
+            .execute(&mut *transaction).await
             .map_err(|e| {
                 eprintln!("update start time {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -399,7 +401,7 @@ impl Handler for TwitchStartHandler {
                 streams.id = $1
         "#)
             .bind(pg_stream_id)
-            .execute(&mut transaction).await
+            .execute(&mut *transaction).await
             .map_err(|e| {
                 eprintln!("update start time {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -444,7 +446,7 @@ impl Handler for TwitterSpaceStartHandler {
             HandlerError::with_message("DB error".into())
         })?;
         
-        let stream = crate::db_util::get_current_stream(&mut transaction, channel_id)
+        let stream = crate::db_util::get_current_stream(&mut *transaction, channel_id)
             .await.map_err(|e| {
                 eprintln!("update start time {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -485,7 +487,7 @@ impl Handler for TwitterSpaceStartHandler {
         "#)
             .bind(stream_start_time)
             .bind(pg_stream_id)
-            .execute(&mut transaction).await
+            .execute(&mut *transaction).await
             .map_err(|e| {
                 eprintln!("update start time {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -499,7 +501,7 @@ impl Handler for TwitterSpaceStartHandler {
                 streams.id = $1
         "#)
             .bind(pg_stream_id)
-            .execute(&mut transaction).await
+            .execute(&mut *transaction).await
             .map_err(|e| {
                 eprintln!("update start time {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -535,6 +537,11 @@ impl Handler for OffsetHandler {
             return Err(HandlerError::with_message(PARAMS_MESSAGE.into()))
         }
         
+        #[derive(Debug, Clone)]
+        struct Offset {
+            position: i64,
+            offset: i64,
+        }
         let offset: Offset = if let (Ok(position), Ok(offset_sec)) = (args[0].parse::<i64>(), args[1].parse::<i64>()) {
             let offset = Offset {
                 position: position,
@@ -552,7 +559,7 @@ impl Handler for OffsetHandler {
             HandlerError::with_message("DB error".into())
         })?;
         
-        let stream = crate::db_util::get_current_stream(&mut transaction, channel_id)
+        let stream = crate::db_util::get_current_stream(&mut *transaction, channel_id)
             .await.map_err(|e| {
                 eprintln!("get current stream {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -572,7 +579,7 @@ impl Handler for OffsetHandler {
             LIMIT 1
         "#)
             .bind(pg_stream_id)
-            .fetch_optional(&mut transaction).await.map_err(|e| {
+            .fetch_optional(&mut *transaction).await.map_err(|e| {
                 eprintln!("get order value {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?
@@ -588,7 +595,7 @@ impl Handler for OffsetHandler {
             .bind(Duration::seconds(offset.position))
             .bind(Duration::seconds(offset.offset))
             .bind(end.map(|x| Duration::seconds(x)))
-            .execute(&mut transaction).await.map_err(|e| {
+            .execute(&mut *transaction).await.map_err(|e| {
                 eprintln!("insert stream offset {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?;

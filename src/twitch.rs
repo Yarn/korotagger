@@ -4,10 +4,11 @@ use anyhow::Context;
 use serde::Deserialize;
 use url::{ Url, Host };
 
-use discord_lib::hyper::Uri;
-use discord_lib::{ hyper, serde_json };
-use hyper::{Body, Method, Request};
-use discord_lib::bytes::buf::BufExt;
+// use discord_lib::hyper::Uri;
+// use discord_lib::{ hyper, serde_json };
+// use discord_lib::{ serde_json };
+// use hyper::{Body, Method, Request};
+// use discord_lib::bytes::buf::BufExt;
 
 use chrono::{ DateTime, FixedOffset };
 
@@ -42,37 +43,46 @@ struct CactusTimestamp {
 }
 
 pub async fn get_start_time(video_id: &str) -> anyhow::Result<DateTime<FixedOffset>> {
-    let client = discord_lib::send_message::get_client().unwrap();
+    // let client = discord_lib::send_message::get_client().unwrap();
+    let client = reqwest::ClientBuilder::new()
+        .timeout(::std::time::Duration::from_secs(10))
+        .build()?;
     
     let path = format!("/timestamps/video?id={}", video_id);
     
     // https://gist.github.com/Decicus/ec4745e680e06cfff5b1fa0a53fcff72
-    let uri = Uri::builder()
-        .scheme("https")
-        .authority("twitch-api-proxy.cactus.workers.dev")
-        .path_and_query(path.as_str())
-        .build()
-        .unwrap();
+    // let uri = Uri::builder()
+    //     .scheme("https")
+    //     .authority("twitch-api-proxy.cactus.workers.dev")
+    //     .path_and_query(path.as_str())
+    //     .build()
+    //     .unwrap();
+    let url = format!("https://twitch-api-proxy.cactus.workers.dev{}", path);
     
-    // dbg!(&uri);
+    // dbg!(&url);
     
-    let req = Request::builder()
-        .method(Method::GET)
-        .uri(uri)
+    // let req = Request::builder()
+    let req = client.get(url)
+        // .method(Method::GET)
+        // .uri(uri)
         .header("Host", "twitch-api-proxy.cactus.workers.dev")
-        .body(Body::empty())
+        // .body(Body::empty())
+        .build()
         .expect("request builder");
     
     // dbg!(&req);
     
     // let res = client.get(uri).await.context("client get")?;
-    let res = client.request(req).await.context("client get")?;
-    let body = hyper::body::to_bytes(res).await?;
+    // let res = client.request(req).await.context("client get")?;
+    let res = client.execute(req).await.context("client get")?;
+    // let body = hyper::body::to_bytes(res).await?;
+    let body = res.bytes().await?.to_vec();
     
     // let a = std::str::from_utf8(&body)?;
     // dbg!(a);
     
-    let data: CactusTimestamp = serde_json::from_reader(body.reader())?;
+    // let data: CactusTimestamp = serde_json::from_reader(body.reader())?;
+    let data: CactusTimestamp = serde_json::from_slice(&body)?;
     
     let created_at = DateTime::parse_from_rfc3339(&data.created_at)?;
     

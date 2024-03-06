@@ -4,10 +4,11 @@ use anyhow::Context;
 use serde::Deserialize;
 use url::{ Url, Host };
 
-use discord_lib::hyper::Uri;
-use discord_lib::{ hyper, serde_json };
-use hyper::{Body, Method, Request};
-use discord_lib::bytes::buf::BufExt;
+// use discord_lib::hyper::Uri;
+// use discord_lib::{ hyper, serde_json };
+// use discord_lib::{ serde_json };
+// use hyper::{Body, Method, Request};
+// use discord_lib::bytes::buf::BufExt;
 
 use chrono::{ DateTime, FixedOffset, Utc, TimeZone };
 
@@ -71,61 +72,79 @@ pub fn extract_id(stream_url: &str) -> Option<String> {
     segs.next().map(|x| x.to_string())
 }
 
-async fn get_guest_token() -> anyhow::Result<String> {
-    let client = discord_lib::send_message::get_client().unwrap();
+async fn get_guest_token(client: &reqwest::Client) -> anyhow::Result<String> {
+    // let client = discord_lib::send_message::get_client().unwrap();
+    // let client = reqwest::ClientBuilder::new()
+    //     .build()?;
     
-    let path = "/1.1/guest/activate.json";
+    // let path = "/1.1/guest/activate.json";
     
-    let uri = Uri::builder()
-        .scheme("https")
-        .authority("api.twitter.com")
-        .path_and_query(path)
-        .build()
-        .unwrap();
     
-    let req = Request::builder()
-        .method(Method::POST)
-        .uri(uri)
+    // let uri = Uri::builder()
+    //     .scheme("https")
+    //     .authority("api.twitter.com")
+    //     .path_and_query(path)
+    //     .build()
+    //     .unwrap();
+    
+    
+    // let req = Request::builder()
+    let req = client.post("https://api.twitter.com/1.1/guest/activate.json")
+        // .method(Method::POST)
+        // .uri(uri)
         .header("Host", "api.twitter.com")
         .header("authorization", "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs=1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA")
-        .body(Body::empty())
+        // .body(Body::empty())
+        .build()
         .expect("request builder");
     
-    let res = client.request(req).await.context("client get")?;
-    let body = hyper::body::to_bytes(res).await?;
+    let res = client.execute(req).await.context("client get")?;
     
-    let data: GuestToken = serde_json::from_reader(body.reader())?;
+    // let body = hyper::body::to_bytes(res).await?;
+    // let data: GuestToken = serde_json::from_reader(body.reader())?;
+    let body: Vec<u8> = res.bytes().await?.to_vec();
+    let data: GuestToken = serde_json::from_slice(&body)?;
     
     Ok(data.guest_token)
 }
 
 pub async fn get_start_time(video_id: &str) -> anyhow::Result<DateTime<FixedOffset>> {
-    let guest_token = get_guest_token().await?;
     
-    let client = discord_lib::send_message::get_client().unwrap();
+    // let client = discord_lib::send_message::get_client().unwrap();
+    let client = reqwest::ClientBuilder::new()
+        .timeout(::std::time::Duration::from_secs(10))
+        .build()?;
+    
+    let guest_token = get_guest_token(&client).await?;
     
     let path = format!("{}{}{}", PATH_BEFORE, video_id, PATH_AFTER);
     
-    let uri = Uri::builder()
-        .scheme("https")
-        .authority("twitter.com")
-        .path_and_query(path.as_str())
-        .build()
-        .unwrap();
+    // let uri = Uri::builder()
+    //     .scheme("https")
+    //     .authority("twitter.com")
+    //     .path_and_query(path.as_str())
+    //     .build()
+    //     .unwrap();
+    let url = format!("https://twitter.com{}", path);
     
-    let req = Request::builder()
-        .method(Method::GET)
-        .uri(uri)
+    // let req = Request::builder()
+    let req = client.get(url)
+        // .method(Method::GET)
+        // .uri(uri)
         .header("Host", "twitter.com")
         .header("authorization", "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs=1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA")
         .header("x-guest-token", guest_token)
-        .body(Body::empty())
+        // .body(Body::empty())
+        .build()
         .expect("request builder");
     
-    let res = client.request(req).await.context("client get")?;
-    let body = hyper::body::to_bytes(res).await?;
+    // let res = client.request(req).await.context("client get")?;
+    let res = client.execute(req).await.context("client get")?;
+    // let body = hyper::body::to_bytes(res).await?;
+    let body: Vec<u8> = res.bytes().await?.to_vec();
     
-    let data: SpaceData = serde_json::from_reader(body.reader())?;
+    // let data: SpaceData = serde_json::from_reader(body.reader())?;
+    let data: SpaceData = serde_json::from_slice(&body)?;
     
     let secs = data.data.audio_space.metadata.created_at / 1000;
     let created_at = Utc.timestamp_opt(secs, 0);

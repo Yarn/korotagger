@@ -8,10 +8,11 @@ use chrono::{ DateTime, FixedOffset };
 
 // use scraper::Html;
 // use scraper::Selector;
-use bytes::buf::BufExt;
+// use bytes::buf::BufExt;
 
-use discord_lib::hyper::Uri;
-use discord_lib::{ hyper, serde_json, bytes };
+// use discord_lib::hyper::Uri;
+// use discord_lib::{ hyper, serde_json, bytes };
+// use discord_lib::{ serde_json };
 
 
 use crate::auto_stream_live::{ SomeError, ToSomeError };
@@ -119,7 +120,10 @@ pub fn extract_id(stream_url: &str) -> Option<&str> {
 
 
 pub async fn get_stream_info(video_id: &str) -> Result<VideoInfo, anyhow::Error> {
-    let client = discord_lib::send_message::get_client().unwrap();
+    // let client = discord_lib::send_message::get_client().unwrap();
+    let client = reqwest::ClientBuilder::new()
+        .timeout(::std::time::Duration::from_secs(10))
+        .build()?;
     
     let path = format!(
         "/youtube/v3/videos?part=liveStreamingDetails,snippet&id={}&key={}",
@@ -127,20 +131,25 @@ pub async fn get_stream_info(video_id: &str) -> Result<VideoInfo, anyhow::Error>
         &*YT_API_KEY,
     );
     
-    let uri = Uri::builder()
-        .scheme("https")
-        .authority("www.googleapis.com")
-        .path_and_query(path.as_str())
-        .build()
-        .unwrap();
+    // let uri = Uri::builder()
+    //     .scheme("https")
+    //     .authority("www.googleapis.com")
+    //     .path_and_query(path.as_str())
+    //     .build()
+    //     .unwrap();
+    let url = format!("https://www.googleapis.com{}", path);
     
-    let res = client.get(uri).await?;
-    let body = hyper::body::to_bytes(res).await?;
+    // let res = client.get(uri).await?;
+    // let body = hyper::body::to_bytes(res).await?;
+    let req = client.get(url).build().expect("request builder");
+    let res = client.execute(req).await?;
+    let body = res.bytes().await?.to_vec();
     
     // let x = std::str::from_utf8(&body);
     // dbg!(x);
     
-    let mut data: VideosList = serde_json::from_reader(body.reader())?;
+    // let mut data: VideosList = serde_json::from_reader(body.reader())?;
+    let mut data: VideosList = serde_json::from_slice(&body)?;
     
     let ref video_info: Item = data.items
         .pop().ok_or_else(|| anyhow::anyhow!("No stream found"))?;
@@ -181,7 +190,12 @@ pub async fn get_stream_start_time(video_id: &str) -> Result<DateTime<FixedOffse
     //     --compressed
     
     
-    let client = discord_lib::send_message::get_client().unwrap();
+    // let client = discord_lib::send_message::get_client().unwrap();
+    let client = reqwest::ClientBuilder::new()
+        .timeout(::std::time::Duration::from_secs(10))
+        .build()
+        .unwrap();
+        // .some_error?;
     
     let path = format!(
         "/youtube/v3/videos?part=liveStreamingDetails&id={}&key={}",
@@ -189,26 +203,34 @@ pub async fn get_stream_start_time(video_id: &str) -> Result<DateTime<FixedOffse
         &*YT_API_KEY,
     );
     
-    let uri = Uri::builder()
-        .scheme("https")
-        .authority("www.googleapis.com")
-        .path_and_query(path.as_str())
+    // let uri = Uri::builder()
+    //     .scheme("https")
+    //     .authority("www.googleapis.com")
+    //     .path_and_query(path.as_str())
+    //     .build()
+    //     .unwrap();
+    let url = format!("https://www.googleapis.com{}", path);
+    
+    let req = client.get(url)
         .build()
-        .unwrap();
+        .expect("request builder");
     
     // let res = client.get(Uri::from_str(url).some_error()?).await.some_error()?;
-    let res = client.get(uri).await.some_error("client get")?;
+    // let res = client.get(uri).await.some_error("client get")?;
+    let res = client.execute(req).await.some_error("client get")?;
     
     // let a = hyper::body::to_bytes(res).await.unwrap();
     // println!("\n{}\n{}", path, String::from_utf8(a.to_vec()).unwrap());
     // panic!();
     
-    let body = hyper::body::to_bytes(res).await.some_error("to_bytes body")?;
+    // let body = hyper::body::to_bytes(res).await.some_error("to_bytes body")?;
+    let body = res.bytes().await.some_error("to_bytes body")?.to_vec();
     
     // use discord_lib::hyper::body::Buf;
     // println!("{:?}", std::str::from_utf8(body.bytes()));
     // panic!();
-    let data: TimeVideosList = serde_json::from_reader(body.reader()).some_error("parse body")?;
+    // let data: TimeVideosList = serde_json::from_reader(body.reader()).some_error("parse body")?;
+    let data: TimeVideosList = serde_json::from_slice(&body).some_error("parse body")?;
     
     let ref details: TimeLiveStreamDetails = data.items
         .get(0).ok_or_else(|| SomeError::msg("No stream found"))?.live_stream_details;

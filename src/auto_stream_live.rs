@@ -2,14 +2,15 @@
 use std::fmt::Debug;
 // use std::time::SystemTime;
 use std::collections::HashSet;
-use serde::Deserialize;
+// use serde::Deserialize;
 // use crate::DB;
 // use crate::{ Stream, State, Offset };
 use discord_lib::SendHandle;
 use discord_lib::discord::Snowflake;
-use discord_lib::tokio::time::timeout;
+// use discord_lib::tokio::time::timeout;
 #[allow(unused_imports)]
 use chrono::Utc;
+#[allow(unused_imports)]
 use chrono::DateTime;
 #[allow(unused_imports)]
 use crate::i_love_youtube::get_stream_start_time;
@@ -81,192 +82,192 @@ impl<T, E: Debug> ToSomeError<T> for Result<T, E> {
 
 // use std::error::Error;
 
-use serde::de::IgnoredAny;
-use serde::de::Deserializer;
-#[allow(unused_imports)]
-use serde::de::{self, Visitor, MapAccess, SeqAccess};
-use std::fmt;
-use std::collections::BTreeMap;
-use discord_lib::serde_json::Value;
+// use serde::de::IgnoredAny;
+// use serde::de::Deserializer;
+// #[allow(unused_imports)]
+// use serde::de::{self, Visitor, MapAccess, SeqAccess};
+// use std::fmt;
+// use std::collections::BTreeMap;
+// use discord_lib::serde_json::Value;
 
 // struct LiveList {
 //     live: Vec<Live>,
 // }
 
-fn live_list<'de, D>(deserializer: D) -> Result<Vec<Live>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    // struct RawLiveVisitor;
+// fn live_list<'de, D>(deserializer: D) -> Result<Vec<Live>, D::Error>
+// where
+//     D: Deserializer<'de>,
+// {
+//     // struct RawLiveVisitor;
     
-    // impl<'de> Visitor<'de> for RawLiveVisitor {
-    //     type Value = RawLive;
+//     // impl<'de> Visitor<'de> for RawLiveVisitor {
+//     //     type Value = RawLive;
         
-    //     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-    //         write!(formatter, "a string representing a 64-bit int")
-    //     }
+//     //     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+//     //         write!(formatter, "a string representing a 64-bit int")
+//     //     }
         
-    //     fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
-    //         where A: MapAccess<'de>
-    //     {
-    //         // let num = v.parse().map_err(|_| {
-    //         //     E::invalid_value(de::Unexpected::Str(v), &"")
-    //         // })?;
+//     //     fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+//     //         where A: MapAccess<'de>
+//     //     {
+//     //         // let num = v.parse().map_err(|_| {
+//     //         //     E::invalid_value(de::Unexpected::Str(v), &"")
+//     //         // })?;
             
-    //         // Ok(Snowflake(num))
-    //         // Ok(num)
-    //         panic!()
-    //     }
-    // }
+//     //         // Ok(Snowflake(num))
+//     //         // Ok(num)
+//     //         panic!()
+//     //     }
+//     // }
     
-    // #[derive(Debug)]
-    // enum RawLive {
-    //     YoutubeLive,
-    //     UnknownLive,
-    // }
+//     // #[derive(Debug)]
+//     // enum RawLive {
+//     //     YoutubeLive,
+//     //     UnknownLive,
+//     // }
     
-    // impl<'de> Deserialize<'de> for RawLive {
-    //     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> 
-    //         where D: Deserializer<'de>
-    //     {
-    //         deserializer.deserialize_map(RawLiveVisitor)
-    //     }
-    // }
+//     // impl<'de> Deserialize<'de> for RawLive {
+//     //     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> 
+//     //         where D: Deserializer<'de>
+//     //     {
+//     //         deserializer.deserialize_map(RawLiveVisitor)
+//     //     }
+//     // }
     
-    struct LiveListVisitor {
+//     struct LiveListVisitor {
         
-    }
+//     }
     
-    impl<'de> Visitor<'de> for LiveListVisitor {
-        type Value = Vec<Live>;
+//     impl<'de> Visitor<'de> for LiveListVisitor {
+//         type Value = Vec<Live>;
         
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("LiveList")
-        }
+//         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+//             formatter.write_str("LiveList")
+//         }
         
-        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: SeqAccess<'de>
-        {
-            let mut values = Vec::new();
+//         fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+//             where
+//                 A: SeqAccess<'de>
+//         {
+//             let mut values = Vec::new();
             
-            // fn get_youtube_live_fields(map: BTreeMap<&str, &str>) -> Option<Live> {
+//             // fn get_youtube_live_fields(map: BTreeMap<&str, &str>) -> Option<Live> {
                 
-            // }
+//             // }
             
-            // fn get_field() -> Result<>
+//             // fn get_field() -> Result<>
             
-            loop {
-                match seq.next_element::<BTreeMap<String, Value>>()? {
-                    Some(raw_live) => {
-                        if raw_live.get("live_start").map(|x| x.is_null()).unwrap_or(true) {
-                            continue
-                        }
+//             loop {
+//                 match seq.next_element::<BTreeMap<String, Value>>()? {
+//                     Some(raw_live) => {
+//                         if raw_live.get("live_start").map(|x| x.is_null()).unwrap_or(true) {
+//                             continue
+//                         }
                         
-                        match raw_live.get("yt_video_key").and_then(|x| x.as_str()) {
-                            Some(yt_video_key) => {
-                                let live = Live {
-                                    id: yt_video_key.to_string(),
-                                    title: raw_live.get("title")
-                                        .ok_or(de::Error::missing_field("title"))?
-                                        .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string title"), &"string"))?
-                                        .to_string(),
-                                    channel: raw_live.get("channel")
-                                        .and_then(|channel| {
-                                            channel.as_object()?.get("yt_channel_id")?.as_str()
-                                        })
-                                        .ok_or(de::Error::missing_field("channel.id"))?
-                                        // .ok_or(de::Error::missing_field("channel"))?
-                                        // .as_object().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string"), &"string"))?
-                                        // .get("id").and_then(|channel| {
-                                        //     channel.get("yt_channel_id")
-                                        // })
-                                        // .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string"), &"string"))?
-                                        .to_string(),
-                                    start_time: raw_live.get("live_start")
-                                        .ok_or(de::Error::missing_field("live_start"))?
-                                        .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string live_start"), &"string"))?
-                                        .to_string(),
-                                    // start_time: raw_live.get("start")
-                                    //     .ok_or(de::Error::missing_field("startTime"))?
-                                    //     .as_u64().ok_or(de::Error::invalid_value(de::Unexpected::Other("non u64"), &"u64 timestamp"))?
-                                    //     .to_string(),
-                                };
-                                values.push(live);
-                            }
-                            None => ()
-                        }
-                        // match raw_live.get("platform") {
-                        //     Some(platform) => {
-                        //         if platform == &"youtube" {
-                        //             let live = Live {
-                        //                 id: raw_live.get("id")
-                        //                     .ok_or(de::Error::missing_field("id"))?
-                        //                     .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string"), &"string"))?
-                        //                     .to_string(),
-                        //                 title: raw_live.get("title")
-                        //                     .ok_or(de::Error::missing_field("title"))?
-                        //                     .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string"), &"string"))?
-                        //                     .to_string(),
-                        //                 channel: raw_live.get("channel")
-                        //                     .ok_or(de::Error::missing_field("channel"))?
-                        //                     .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string"), &"string"))?
-                        //                     .to_string(),
-                        //                 start_time: raw_live.get("start")
-                        //                     .ok_or(de::Error::missing_field("startTime"))?
-                        //                     .as_u64().ok_or(de::Error::invalid_value(de::Unexpected::Other("non u64"), &"u64 timestamp"))?
-                        //                     .to_string(),
-                        //             };
-                        //             values.push(live);
-                        //         }
-                        //     }
-                        //     None => ()
-                        // }
-                    }
-                    None => break
-                }
-            }
+//                         match raw_live.get("yt_video_key").and_then(|x| x.as_str()) {
+//                             Some(yt_video_key) => {
+//                                 let live = Live {
+//                                     id: yt_video_key.to_string(),
+//                                     title: raw_live.get("title")
+//                                         .ok_or(de::Error::missing_field("title"))?
+//                                         .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string title"), &"string"))?
+//                                         .to_string(),
+//                                     channel: raw_live.get("channel")
+//                                         .and_then(|channel| {
+//                                             channel.as_object()?.get("yt_channel_id")?.as_str()
+//                                         })
+//                                         .ok_or(de::Error::missing_field("channel.id"))?
+//                                         // .ok_or(de::Error::missing_field("channel"))?
+//                                         // .as_object().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string"), &"string"))?
+//                                         // .get("id").and_then(|channel| {
+//                                         //     channel.get("yt_channel_id")
+//                                         // })
+//                                         // .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string"), &"string"))?
+//                                         .to_string(),
+//                                     start_time: raw_live.get("live_start")
+//                                         .ok_or(de::Error::missing_field("live_start"))?
+//                                         .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string live_start"), &"string"))?
+//                                         .to_string(),
+//                                     // start_time: raw_live.get("start")
+//                                     //     .ok_or(de::Error::missing_field("startTime"))?
+//                                     //     .as_u64().ok_or(de::Error::invalid_value(de::Unexpected::Other("non u64"), &"u64 timestamp"))?
+//                                     //     .to_string(),
+//                                 };
+//                                 values.push(live);
+//                             }
+//                             None => ()
+//                         }
+//                         // match raw_live.get("platform") {
+//                         //     Some(platform) => {
+//                         //         if platform == &"youtube" {
+//                         //             let live = Live {
+//                         //                 id: raw_live.get("id")
+//                         //                     .ok_or(de::Error::missing_field("id"))?
+//                         //                     .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string"), &"string"))?
+//                         //                     .to_string(),
+//                         //                 title: raw_live.get("title")
+//                         //                     .ok_or(de::Error::missing_field("title"))?
+//                         //                     .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string"), &"string"))?
+//                         //                     .to_string(),
+//                         //                 channel: raw_live.get("channel")
+//                         //                     .ok_or(de::Error::missing_field("channel"))?
+//                         //                     .as_str().ok_or(de::Error::invalid_value(de::Unexpected::Other("non string"), &"string"))?
+//                         //                     .to_string(),
+//                         //                 start_time: raw_live.get("start")
+//                         //                     .ok_or(de::Error::missing_field("startTime"))?
+//                         //                     .as_u64().ok_or(de::Error::invalid_value(de::Unexpected::Other("non u64"), &"u64 timestamp"))?
+//                         //                     .to_string(),
+//                         //             };
+//                         //             values.push(live);
+//                         //         }
+//                         //     }
+//                         //     None => ()
+//                         // }
+//                     }
+//                     None => break
+//                 }
+//             }
             
-            Ok(values)
-        }
-    }
+//             Ok(values)
+//         }
+//     }
     
     
-    // let mut values = Vec::new();
+//     // let mut values = Vec::new();
     
-    // loop {
-    //     match seq.next_element::<Bar>() {
-    //         Ok(Some(x)) => values.push(x),
-    //         Ok(None) => break,
-    //         Err(e) => {
-    //             if !e.to_string().starts_with("missing field") {
-    //                 return Err(e);
-    //             }
-    //         }
-    //     }
-    // }
+//     // loop {
+//     //     match seq.next_element::<Bar>() {
+//     //         Ok(Some(x)) => values.push(x),
+//     //         Ok(None) => break,
+//     //         Err(e) => {
+//     //             if !e.to_string().starts_with("missing field") {
+//     //                 return Err(e);
+//     //             }
+//     //         }
+//     //     }
+//     // }
     
-    // Ok(VecOpt(values))
-    deserializer.deserialize_any(LiveListVisitor {})
-}
+//     // Ok(VecOpt(values))
+//     deserializer.deserialize_any(LiveListVisitor {})
+// }
 
-#[derive(Debug, Clone, Deserialize)]
-struct Live {
-    id: String,
-    title: String,
-    // r#type: String,
-    channel: String,
-    #[serde(default, alias = "startTime")]
-    start_time: String,
-}
+// #[derive(Debug, Clone, Deserialize)]
+// struct Live {
+//     id: String,
+//     title: String,
+//     // r#type: String,
+//     channel: String,
+//     #[serde(default, alias = "startTime")]
+//     start_time: String,
+// }
 
-#[derive(Debug, Deserialize)]
-struct JetriLive {
-    #[serde(deserialize_with = "live_list")]
-    live: Vec<Live>,
-    #[allow(dead_code)]
-    upcoming: IgnoredAny,
-}
+// #[derive(Debug, Deserialize)]
+// struct JetriLive {
+//     #[serde(deserialize_with = "live_list")]
+//     live: Vec<Live>,
+//     #[allow(dead_code)]
+//     upcoming: IgnoredAny,
+// }
 
 pub struct GenericLive {
     pub id: String,
@@ -301,7 +302,7 @@ pub async fn process_generic(
                 "type" = 'youtube'
         "#)
             .bind(&live.channel)
-            .fetch_all(&mut transaction)
+            .fetch_all(&mut *transaction)
             .await.context("get subscribed channels")?;
         
         let mut updated_channels: Vec<u64> = Vec::new();
@@ -376,7 +377,7 @@ pub async fn process_generic(
                 // https://discord.com/developers/docs/resources/channel#get-channel
                 .bind(start_time)
                 .bind(server_id)
-                .fetch_one(&mut transaction).await.context("insert stream")?;
+                .fetch_one(&mut *transaction).await.context("insert stream")?;
             
             sqlx::query(r#"
                 INSERT INTO config.selected_streams (channel, stream)
@@ -386,7 +387,7 @@ pub async fn process_generic(
             "#)
                 .bind(to_i(channel_id))
                 .bind(stream_id)
-                .execute(&mut transaction)
+                .execute(&mut *transaction)
                 .await.context("set selected stream")?;
             
             updated_channels.push(channel_id)
@@ -413,114 +414,114 @@ pub async fn process_generic(
     Ok(())
 }
 
-#[allow(dead_code)]
-pub async fn auto_live_task(send_handle: &SendHandle, active: &mut HashSet<String>, pool: &sqlx::PgPool, d_state: DState) -> Result<(), SomeError> {
+// #[allow(dead_code)]
+// pub async fn auto_live_task(send_handle: &SendHandle, active: &mut HashSet<String>, pool: &sqlx::PgPool, d_state: DState) -> Result<(), SomeError> {
     
-    use discord_lib::hyper::Uri;
-    use discord_lib::{ hyper, bytes };
-    // use bytes::BufExt as _;
-    // use discord_lib::hyper::body::Buf as _;
-    use discord_lib::hyper::body::Bytes;
-    #[allow(unused_imports)]
-    use bytes::buf::BufExt as _;
+//     use discord_lib::hyper::Uri;
+//     use discord_lib::{ hyper, bytes };
+//     // use bytes::BufExt as _;
+//     // use discord_lib::hyper::body::Buf as _;
+//     use discord_lib::hyper::body::Bytes;
+//     #[allow(unused_imports)]
+//     use bytes::buf::BufExt as _;
     
-    // use bytes::{Buf, IntoBuf, Bytes};
-    use discord_lib::tokio::time::delay_for;
-    let client = discord_lib::send_message::get_client().some_error("get_client")?;
+//     // use bytes::{Buf, IntoBuf, Bytes};
+//     use discord_lib::tokio::time::delay_for;
+//     let client = discord_lib::send_message::get_client().some_error("get_client")?;
     
-    // let mut active: HashSet<String> = std::default::Default::default();
+//     // let mut active: HashSet<String> = std::default::Default::default();
     
-    // let mut channel_cache: BTreeMap<u64, Channel> = BTreeMap::new();
+//     // let mut channel_cache: BTreeMap<u64, Channel> = BTreeMap::new();
     
-    // let res = client.get(Uri::from_static("https://api.jetri.co/live")).await.some_error("client get")?;
-    // let res = client.get(Uri::from_static("https://api.jetri.co/live/1.1")).await.some_error("client get")?;
-    let res = timeout(
-        ::std::time::Duration::new(60, 0),
-        client.get(Uri::from_static("https://api.holotools.app/v1/live"))
-    ).await.some_error("client get timeout")?.some_error("client get")?;
+//     // let res = client.get(Uri::from_static("https://api.jetri.co/live")).await.some_error("client get")?;
+//     // let res = client.get(Uri::from_static("https://api.jetri.co/live/1.1")).await.some_error("client get")?;
+//     let res = timeout(
+//         ::std::time::Duration::new(60, 0),
+//         client.get(Uri::from_static("https://api.holotools.app/v1/live"))
+//     ).await.some_error("client get timeout")?.some_error("client get")?;
     
-    let body: Bytes = match timeout(::std::time::Duration::new(60, 0), hyper::body::to_bytes(res)).await {
-        Ok(x) => x,
-        Err(err) => {
-            dbg!("auto live timeout", &err);
-            delay_for(::std::time::Duration::new(60, 0)).await;
-            // continue;
-            return Err(err).some_error("timeout");
-        }
-    }.some_error("read body")?;
+//     let body: Bytes = match timeout(::std::time::Duration::new(60, 0), hyper::body::to_bytes(res)).await {
+//         Ok(x) => x,
+//         Err(err) => {
+//             dbg!("auto live timeout", &err);
+//             delay_for(::std::time::Duration::new(60, 0)).await;
+//             // continue;
+//             return Err(err).some_error("timeout");
+//         }
+//     }.some_error("read body")?;
     
-    // let mut buf: Vec<u8> = Vec::new();
-    // buf.resize(body.remaining(), 0);
-    // body.copy_to_slice(&mut buf);
-    // let body: &[u8] = &buf;
-    let body: &[u8] = &body;
+//     // let mut buf: Vec<u8> = Vec::new();
+//     // buf.resize(body.remaining(), 0);
+//     // body.copy_to_slice(&mut buf);
+//     // let body: &[u8] = &buf;
+//     let body: &[u8] = &body;
     
-    // let body_str: &str = std::str::from_utf8(body).some_error("utf8 decode")?;
-    // // println!("{:?}", &body.bytes()[539..540]);
-    // println!("{:?}", body_str);
+//     // let body_str: &str = std::str::from_utf8(body).some_error("utf8 decode")?;
+//     // // println!("{:?}", &body.bytes()[539..540]);
+//     // println!("{:?}", body_str);
     
-    let body_str: &str = std::str::from_utf8(body).some_error("utf8 decode")?;
-    // println!("{:?}", body_str);
+//     let body_str: &str = std::str::from_utf8(body).some_error("utf8 decode")?;
+//     // println!("{:?}", body_str);
     
-    // let data: JetriLive = serde_json::from_reader(body.reader()).some_error("parse json").map_err(|err| {
-    // let data: JetriLive = serde_json::from_str(body_str)
-    // .map_err(|err| {
-    //     // dbg!(err.line());
-    //     println!("{}", err);
+//     // let data: JetriLive = serde_json::from_reader(body.reader()).some_error("parse json").map_err(|err| {
+//     // let data: JetriLive = serde_json::from_str(body_str)
+//     // .map_err(|err| {
+//     //     // dbg!(err.line());
+//     //     println!("{}", err);
         
-    //     if let Some(line) = body_str.lines().skip(err.line()-1).next() {
-    //         let col = err.column();
-    //         let start = ((col as isize) - 5).max(0) as usize;
-    //         let end = (col + 500).min(line.len());
+//     //     if let Some(line) = body_str.lines().skip(err.line()-1).next() {
+//     //         let col = err.column();
+//     //         let start = ((col as isize) - 5).max(0) as usize;
+//     //         let end = (col + 500).min(line.len());
             
-    //         fn find_char_boundary(s: &str, i: usize) -> usize {
-    //             let mut bound = i;
-    //             while !s.is_char_boundary(bound) {
-    //                 bound -= 1;
-    //             }
-    //             bound
-    //         }
-    //         let start = find_char_boundary(line, start);
-    //         let end = find_char_boundary(line, end);
+//     //         fn find_char_boundary(s: &str, i: usize) -> usize {
+//     //             let mut bound = i;
+//     //             while !s.is_char_boundary(bound) {
+//     //                 bound -= 1;
+//     //             }
+//     //             bound
+//     //         }
+//     //         let start = find_char_boundary(line, start);
+//     //         let end = find_char_boundary(line, end);
             
-    //         let sub_str = &line[start..end];
-    //         let arrow = "     ^";
-    //         // dbg!(sub_str);
-    //         println!("{}", sub_str);
-    //         println!("{}", arrow);
-    //     } else {
-    //         println!("Invalid line number.");
-    //     }
+//     //         let sub_str = &line[start..end];
+//     //         let arrow = "     ^";
+//     //         // dbg!(sub_str);
+//     //         println!("{}", sub_str);
+//     //         println!("{}", arrow);
+//     //     } else {
+//     //         println!("Invalid line number.");
+//     //     }
         
-    //     err
-    // })
-    let data: JetriLive = crate::util::parse_json_print_err(body_str)
-    .some_error("parse json").map_err(|err| {
-        // dbg!(&err, body_str);
-        // dbg!(&err);
+//     //     err
+//     // })
+//     let data: JetriLive = crate::util::parse_json_print_err(body_str)
+//     .some_error("parse json").map_err(|err| {
+//         // dbg!(&err, body_str);
+//         // dbg!(&err);
         
-        err
-    })?;
+//         err
+//     })?;
     
-    let mut generic = Vec::new();
-    for live in data.live.iter() {
-        let start_time = DateTime::parse_from_rfc3339(&live.start_time).some_error("parse_from_rfc3339")?;
-        let live = GenericLive {
-            id: live.id.clone(),
-            channel: live.channel.clone(),
-            title: live.title.clone(),
-            start_time: start_time,
-        };
-        generic.push(live);
-    }
+//     let mut generic = Vec::new();
+//     for live in data.live.iter() {
+//         let start_time = DateTime::parse_from_rfc3339(&live.start_time).some_error("parse_from_rfc3339")?;
+//         let live = GenericLive {
+//             id: live.id.clone(),
+//             channel: live.channel.clone(),
+//             title: live.title.clone(),
+//             start_time: start_time,
+//         };
+//         generic.push(live);
+//     }
     
-    process_generic(
-        &generic,
-        active,
-        send_handle,
-        pool,
-        d_state,
-    ).await.some_error("generic")?;
+//     process_generic(
+//         &generic,
+//         active,
+//         send_handle,
+//         pool,
+//         d_state,
+//     ).await.some_error("generic")?;
     
-    Ok(())
-}
+//     Ok(())
+// }

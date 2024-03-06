@@ -13,44 +13,48 @@ use crate::video_id::VideoId;
 use crate::{ from_i, to_i };
 use crate::db_util;
 use sqlx::PgPool;
-use time::PrimitiveDateTime as DateTime;
-use time::Duration;
+// use time::PrimitiveDateTime as DateTime;
+use chrono::Duration;
+use crate::util::seconds_f64;
 
-fn format_time_offset(mut time_offset: time::Duration, hour: &str, min: &str, sec: &str) -> String {
+// type DateTime = chrono::DateTime<chrono::offset::Utc>;
+type DateTime = chrono::NaiveDateTime;
+
+fn format_time_offset(mut time_offset: Duration, hour: &str, min: &str, sec: &str) -> String {
     let mut time_offset_str = String::new();
-    let offset_hours = time_offset.whole_hours();
+    let offset_hours = time_offset.num_hours();
     if offset_hours != 0 {
         time_offset_str.push_str(&format!("{}", offset_hours));
         time_offset_str.push_str(hour);
-        time_offset = time_offset - time::Duration::hours(offset_hours);
+        time_offset = time_offset - Duration::hours(offset_hours);
     }
-    let offset_minutes = time_offset.whole_minutes();
+    let offset_minutes = time_offset.num_minutes();
     if offset_minutes != 0 {
         time_offset_str.push_str(&format!("{}", offset_minutes));
         time_offset_str.push_str(min);
-        time_offset = time_offset - time::Duration::minutes(offset_minutes);
+        time_offset = time_offset - Duration::minutes(offset_minutes);
     }
-    time_offset_str.push_str(&format!("{}", time_offset.whole_seconds()));
+    time_offset_str.push_str(&format!("{}", time_offset.num_seconds()));
     time_offset_str.push_str(sec);
     
     time_offset_str
 }
 
-fn format_time_offset_yt(mut time_offset: time::Duration) -> String {
+fn format_time_offset_yt(mut time_offset: Duration) -> String {
     let mut out = String::new();
     
-    let offset_hours = time_offset.whole_hours();
+    let offset_hours = time_offset.num_hours();
     if offset_hours != 0 {
         out.push_str(&format!("{}:", offset_hours));
-        time_offset = time_offset - time::Duration::hours(offset_hours);
+        time_offset = time_offset - Duration::hours(offset_hours);
     }
     time_offset = time_offset.abs();
-    let offset_minutes = time_offset.whole_minutes();
+    let offset_minutes = time_offset.num_minutes();
     if offset_hours != 0 || offset_minutes != 0 {
         out.push_str(&format!("{:0>2}:", offset_minutes));
-        time_offset = time_offset - time::Duration::minutes(offset_minutes);
+        time_offset = time_offset - Duration::minutes(offset_minutes);
     }
-    out.push_str(&format!("{:0>2}", time_offset.whole_seconds()));
+    out.push_str(&format!("{:0>2}", time_offset.num_seconds()));
     
     out
 }
@@ -59,7 +63,7 @@ fn format_tag_standard(
     out: &mut String,
     video_id: &VideoId,
     tag_name: &str, tag_votes: i32,
-    _stream_name: &str, time_offset: time::Duration,
+    _stream_name: &str, time_offset: Duration,
 ) {
     let tag_name = escape_embed(tag_name);
     let time_offset_str = format_time_offset( time_offset, "h", "m", "s");
@@ -80,7 +84,7 @@ fn format_tag_standard(
 fn format_tag_yt(
     out: &mut String,
     tag_name: &str, _tag_votes: i32,
-    _stream_name: &str, time_offset: time::Duration,
+    _stream_name: &str, time_offset: Duration,
 ) {
     let tag_name = escape_embed(tag_name);
     let time_offset_str = format_time_offset_yt(time_offset);
@@ -95,7 +99,7 @@ fn format_tag_yt(
 fn format_tag_csv(
     out: &mut String,
     tag_name: &str, tag_votes: i32,
-    _stream_name: &str, time_offset: time::Duration,
+    _stream_name: &str, time_offset: Duration,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let tag_name = &*escape_embed(tag_name);
     
@@ -105,7 +109,7 @@ fn format_tag_csv(
     
     writer.write_field(tag_name)?;
     writer.write_field(&format!("{}", tag_votes))?;
-    writer.write_field(&format!("{}", time_offset.whole_seconds()))?;
+    writer.write_field(&format!("{}", time_offset.num_seconds()))?;
     
     writer.write_record(None::<&[u8]>)?;
     
@@ -157,7 +161,7 @@ impl Handler for TagsHandler {
         
         let stream = match stream_name {
             "_" => {
-                let stream = db_util::get_current_stream(&mut transaction, channel_id)
+                let stream = db_util::get_current_stream(&mut *transaction, channel_id)
                     .await.map_err(|e| {
                         eprintln!("get current stream {:?}", e);
                         HandlerError::with_message("DB error".into())
@@ -187,7 +191,7 @@ impl Handler for TagsHandler {
                         }
                     }
                 };
-                let stream = db_util::get_stream_by_name(&mut transaction, stream_name, query_server_id, Some(server_id.0))
+                let stream = db_util::get_stream_by_name(&mut *transaction, stream_name, query_server_id, Some(server_id.0))
                     .await.map_err(|e| {
                         eprintln!("get stream {:?}", e);
                         HandlerError::with_message("DB error".into())
@@ -240,7 +244,7 @@ impl Handler for TagsHandler {
             // .bind(None::<&str>)
             // .bind(stream.id)
             // .bind(None::<i32>)
-            .fetch_all(&mut transaction).await.map_err(|e| {
+            .fetch_all(&mut *transaction).await.map_err(|e| {
                 eprintln!("get tags {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?;
@@ -255,16 +259,18 @@ impl Handler for TagsHandler {
             ORDER BY "order"
         "#)
             .bind(stream.id)
-            .fetch_all(&mut transaction).await.map_err(|e| {
+            .fetch_all(&mut *transaction).await.map_err(|e| {
                 eprintln!("get offsets {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?;
         
         let mut out = String::new();
         
-        let jst_time = stream.start_time.assume_utc().to_offset(time::UtcOffset::hours(9));
+        // let jst_time = stream.start_time.assume_utc().to_offset(time::UtcOffset::hours(9));
+        let offset = chrono::FixedOffset::east_opt(9 * 60 * 60).unwrap();
+        let jst_time = stream.start_time.and_utc().with_timezone(&offset);
         // let time_disp = jst_time.lazy_format("%T JST");
-        let start_timestamp = jst_time.unix_timestamp();
+        let start_timestamp = jst_time.timestamp();
         let time_disp = format!("<t:{}>", start_timestamp);
         
         let probably_link = stream.name.starts_with("http://") || stream.name.starts_with("https://");
@@ -287,14 +293,16 @@ impl Handler for TagsHandler {
                 continue
             }
             
-            let mut delta = tag_time - stream.start_time;
+            let mut delta: Duration = tag_time - stream.start_time;
             
-            delta += Duration::seconds_f64(tag_adj);
+            // delta += Duration::seconds_f64(tag_adj);
+            // delta += Duration::microseconds((tag_adj / 1000000.0) as i64);
+            delta += seconds_f64(tag_adj);
             delta -= Duration::seconds(20);
             
             for (pos, end, offset) in offsets.iter() {
-                if delta >= Duration::seconds_f64(*pos) && end.map_or(true, |x| delta <= Duration::seconds_f64(x)) {
-                    delta += Duration::seconds_f64(*offset);
+                if delta >= seconds_f64(*pos) && end.map_or(true, |x| delta <= seconds_f64(x)) {
+                    delta += seconds_f64(*offset);
                 }
             }
             
@@ -312,7 +320,7 @@ impl Handler for TagsHandler {
         adjusted_tags.sort_by(|a, b| a.delta.cmp(&b.delta));
         
         let per_min_str = if let Some(tag) = adjusted_tags.last() {
-            let tags_per_min = adjusted_tags.len() as f64 / tag.delta.as_seconds_f64() as f64 * 60.0;
+            let tags_per_min = adjusted_tags.len() as f64 / (tag.delta.num_milliseconds() as f64 * 1000.0) * 60.0;
             format!(" ({:.1}/min)", tags_per_min)
         } else {
             "".into()
@@ -596,7 +604,8 @@ pub fn parse_tag_message(msg: &str) -> Option<&str> {
 impl Handler for TagHandler {
     async fn handle_message(&self, msg: &Message) -> HandlerResult {
         
-        let tag_time = time::OffsetDateTime::now_utc();
+        // let tag_time = time::OffsetDateTime::now_utc();
+        let tag_time = chrono::offset::Utc::now().naive_utc();
         
         let tag_name = if msg.content.starts_with("!") {
             let mut args = msg.content.splitn(2, " ");
@@ -635,7 +644,7 @@ impl Handler for TagHandler {
             HandlerError::with_message("DB error".into())
         })?;
         
-        let stream = crate::db_util::get_current_stream(&mut transaction, channel_id)
+        let stream = crate::db_util::get_current_stream(&mut *transaction, channel_id)
             .await.map_err(|e| {
                 eprintln!("get current stream {:?}", e);
                 HandlerError::with_message("DB error".into())
@@ -659,7 +668,7 @@ impl Handler for TagHandler {
             .bind(msg.guild_id.as_ref().map(|x| to_i(x.0)))
             .bind(to_i(msg.author.id.0))
             .bind(to_i(msg.id.0))
-            .execute(&mut transaction).await.map_err(|e| {
+            .execute(&mut *transaction).await.map_err(|e| {
                 eprintln!("insert tag {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?;
@@ -880,7 +889,7 @@ impl Handler for AdjustHandler {
         "#)
             .bind(to_i(user))
             .bind(to_i(channel_id))
-            .fetch_optional(&mut transaction).await.map_err(|e| {
+            .fetch_optional(&mut *transaction).await.map_err(|e| {
                 eprintln!("get tag {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?
@@ -892,8 +901,8 @@ impl Handler for AdjustHandler {
             VALUES (0,       $1,  $2)
         "#)
             .bind(tag_id)
-            .bind(time::Duration::seconds(adjust))
-            .execute(&mut transaction).await.map_err(|e| {
+            .bind(Duration::seconds(adjust))
+            .execute(&mut *transaction).await.map_err(|e| {
                 eprintln!("insert tag offset {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?;

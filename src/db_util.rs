@@ -2,9 +2,13 @@
 use sqlx::prelude::Executor;
 use sqlx::Postgres;
 use sqlx::postgres::PgArguments;
-use time::PrimitiveDateTime as DateTime;
+// use time::PrimitiveDateTime as DateTime;
+// use chrono::Duration;
 
 use crate::to_i;
+
+// type DateTime = chrono::DateTime<chrono::offset::Utc>;
+type DateTime = chrono::NaiveDateTime;
 
 #[allow(dead_code)]
 pub struct Select<'a> {
