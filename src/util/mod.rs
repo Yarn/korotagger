@@ -50,5 +50,5 @@ pub fn parse_json_print_err<'a, T: serde::Deserialize<'a>>(input: &'a str) -> se
 }
 
 pub fn seconds_f64(d: f64) -> Duration {
-    Duration::microseconds((d / 1000000.0) as i64)
+    Duration::microseconds((d * 1000000.0) as i64)
 }
