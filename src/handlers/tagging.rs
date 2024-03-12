@@ -320,7 +320,7 @@ impl Handler for TagsHandler {
         adjusted_tags.sort_by(|a, b| a.delta.cmp(&b.delta));
         
         let per_min_str = if let Some(tag) = adjusted_tags.last() {
-            let tags_per_min = adjusted_tags.len() as f64 / (tag.delta.num_milliseconds() as f64 * 1000.0) * 60.0;
+            let tags_per_min = adjusted_tags.len() as f64 / (tag.delta.num_milliseconds() as f64 / 1000.0 / 60.0);
             format!(" ({:.1}/min)", tags_per_min)
         } else {
             "".into()
