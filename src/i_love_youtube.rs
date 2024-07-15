@@ -93,6 +93,8 @@ pub fn extract_id(stream_url: &str) -> Option<&str> {
         return None;
     };
     
+    let stream_url = stream_url.trim_start_matches("www.");
+    
     if stream_url.starts_with("www.youtube.com/watch?v=") {
         let mut part = stream_url.trim_start_matches("www.youtube.com/watch?v=");
         part = part.splitn(2, '&').next()?;
@@ -105,6 +107,16 @@ pub fn extract_id(stream_url: &str) -> Option<&str> {
         Some(part)
     } else if stream_url.starts_with("www.youtube.com/embed/") {
         let mut part = stream_url.trim_start_matches("www.youtube.com/embed/");
+        part = part.splitn(2, '?').next()?;
+        part = part.trim_end_matches('/');
+        Some(part)
+    } else if stream_url.starts_with("youtube.com/live/") {
+        let mut part = stream_url.trim_start_matches("youtube.com/live/");
+        part = part.splitn(2, '?').next()?;
+        part = part.trim_end_matches('/');
+        Some(part)
+    } else if stream_url.starts_with("youtube.com/shorts/") {
+        let mut part = stream_url.trim_start_matches("youtube.com/shorts/");
         part = part.splitn(2, '?').next()?;
         part = part.trim_end_matches('/');
         Some(part)
