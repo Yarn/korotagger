@@ -1,0 +1,39 @@
+services:
+  kt-app:
+     image: jakefrosty/korotagger:1.3
+     cpus: 0.5
+     mem_limit: 100m
+     container_name: korotagger-app
+     environment:
+       yt_api_key: your-yt-api-key
+       holodex_api_key: your-holodex-api-key
+       POSTGRES_HOST: kt-db
+       POSTGRES_PORT: 5432
+       POSTGRES_USER: username
+       POSTGRES_PASSWORD: averysecurepassword
+       POSTGRES_DB: your-database-name
+       discord_auth: your-bot-token-here
+     depends_on:
+       - kt-db
+     volumes:
+       - app:/app
+  kt-db:
+     image: postgres:16.3-alpine3.20
+     cpus: 0.5
+     mem_limit: 100M
+     restart: unless-stopped
+     container_name: korotagger-db
+     environment:
+      - POSTGRES_USER=username
+      - POSTGRES_PASSWORD=averysecurepassword
+      - POSTGRES_DATABASE=your-database-name
+     volumes:
+      - kt-db:/var/lib/postgresql/data
+     healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  kt-db:
+  app:
