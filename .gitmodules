@@ -1,3 +1,3 @@
 [submodule "discord_lib"]
 	path = discord_lib
-	url = git@github.com:Yarn/discord-lib.git
+	url = https://github.com/Yarn/discord-lib.git
