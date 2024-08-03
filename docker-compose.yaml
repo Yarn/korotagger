@@ -1,8 +1,6 @@
 services:
   kt-app:
-     image: jakefrosty/korotagger:1.3
-     cpus: 0.5
-     mem_limit: 100m
+     build: .
      container_name: korotagger-app
      environment:
        yt_api_key: your-yt-api-key
@@ -19,8 +17,6 @@ services:
        - app:/app
   kt-db:
      image: postgres:16.3-alpine3.20
-     cpus: 0.5
-     mem_limit: 100M
      restart: unless-stopped
      container_name: korotagger-db
      environment:
