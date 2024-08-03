@@ -1,27 +1,28 @@
 services:
   kt-app:
      build: .
+     #image: jakefrosty/korotagger:1.5
      container_name: korotagger-app
      environment:
-       yt_api_key: your-yt-api-key
-       holodex_api_key: your-holodex-api-key
-       POSTGRES_HOST: kt-db
-       POSTGRES_PORT: 5432
-       POSTGRES_USER: username
-       POSTGRES_PASSWORD: averysecurepassword
-       POSTGRES_DB: your-database-name
-       discord_auth: your-bot-token-here
+      - yt_api_key=your-yt-api-key
+      - holodex_api_key=your-holodex-api-key
+      - POSTGRES_HOST=kt-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=username
+      - POSTGRES_PASSWORD="averysecurepassword"
+      - POSTGRES_DB=your-database-name
+      - discord_auth=your-bot-token-here
      depends_on:
        - kt-db
      volumes:
-       - app:/app
+       - kt-app:/app
   kt-db:
      image: postgres:16.3-alpine3.20
      restart: unless-stopped
      container_name: korotagger-db
      environment:
       - POSTGRES_USER=username
-      - POSTGRES_PASSWORD=averysecurepassword
+      - POSTGRES_PASSWORD="averysecurepassword"
       - POSTGRES_DATABASE=your-database-name
      volumes:
       - kt-db:/var/lib/postgresql/data
@@ -31,5 +32,5 @@ services:
       timeout: 5s
       retries: 5
 volumes:
+  kt-app:
   kt-db:
-  app:
