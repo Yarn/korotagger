@@ -6,8 +6,7 @@ export pg_url
 
 # Function to check if PostgreSQL is ready
 wait_for_postgres() {
-    echo "Waiting for PostgreSQL at ${POSTGRES_HOST}:${POSTGRES_PORT} to be ready..."
-
+    echo "Waiting for PostgreSQL at $POSTGRES_HOST:$POSTGRES_PORT"
     # Check connectivity
     until PGPASSWORD="$POSTGRES_PASSWORD" pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER"; do
         echo "PostgreSQL is not accepting connections yet. Waiting..."
@@ -27,17 +26,13 @@ wait_for_postgres() {
 
 # Function to check if the application is running for the first time
 check_first_time_run() {
-    result=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT to_regclass('config.first_time_run');")
-    if [ "$result" = "config.first_time_run" ]; then
-        entry_count=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT COUNT(*) FROM config.first_time_run;")
-        if [ "$entry_count" -eq 0 ]; then
-            return 0  # First-time run
-        else
-            return 1  # Not a first-time run
-        fi
-    else
-        return 0  # First-time run, as the table does not exist
-    fi
+     # this will confirm if "member.required_roles" exist which is the last executed on members.sql
+     check=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema = 'member' AND table_name = 'required_roles';")
+     if [ "$check" = "1" ]; then
+         return 1 # Not a First-time run
+     else
+         return 0 # Not a first-time run
+     fi
 }
 
 # Run the wait function
@@ -46,14 +41,7 @@ wait_for_postgres
 # Check if it is the first time run
 if check_first_time_run; then
     echo "First-time run detected. Running SQL initialization scripts..."
-
-    # Run SQL initialization scripts
-    for sql_file in /app/migrations/*.sql; do
-        if [ -f "$sql_file" ]; then
-            echo "Running SQL script $sql_file..."
-            PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$sql_file"
-        fi
-    done
+    /app/korotagger migrate
 else
     echo "Not the first-time run. Skipping SQL initialization."
 fi
