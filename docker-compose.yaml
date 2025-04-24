@@ -3,6 +3,7 @@ services:
      build: .
      #image: jakefrosty/korotagger:1.5
      container_name: korotagger-app
+     mem_limit: 100m
      environment:
       - yt_api_key=your-yt-api-key
       - holodex_api_key=your-holodex-api-key
