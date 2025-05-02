@@ -105,8 +105,8 @@ pub fn extract_id(stream_url: &str) -> Option<&str> {
         part = part.splitn(2, '&').next()?;
         part = part.trim_end_matches('/');
         Some(part)
-    } else if stream_url.starts_with("www.youtube.com/embed/") {
-        let mut part = stream_url.trim_start_matches("www.youtube.com/embed/");
+    } else if stream_url.starts_with("youtube.com/embed/") {
+        let mut part = stream_url.trim_start_matches("youtube.com/embed/");
         part = part.splitn(2, '?').next()?;
         part = part.trim_end_matches('/');
         Some(part)

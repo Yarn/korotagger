@@ -23,6 +23,7 @@ use discord_lib::discord::Snowflake;
 
 use sqlx::PgPool;
 
+#[derive(Debug, PartialEq)]
 enum FoundUrl {
     Youtube{video_id: String},
     Twitch{video_id: String},
@@ -319,26 +320,34 @@ impl Handler for ChannelWatchHandler {
 
 #[cfg(test)]
 mod tests {
+    use super::{ find_yt_url, FoundUrl };
+    
     #[test]
     fn non_url() {
-        assert_eq!(super::find_yt_url("a"), None);
+        assert_eq!(find_yt_url("a"), FoundUrl::None);
     }
     
     #[test]
-    fn has_url() {
-        assert_eq!(super::find_yt_url("http://www.youtube.com/watch?v=aaaaaa"), Some("aaaaaa".into()));
-        assert_eq!(super::find_yt_url("uxbeix http://www.youtube.com/watch?v=aaaaaa aoeui"), Some("aaaaaa".into()));
+    fn has_youtube_url() {
+        assert_eq!(find_yt_url("http://www.youtube.com/watch?v=aaaaaa"), FoundUrl::Youtube{ video_id: "aaaaaa".into() });
+        assert_eq!(find_yt_url("uxbeix http://www.youtube.com/watch?v=aaaaaa aoeui"), FoundUrl::Youtube{ video_id: "aaaaaa".into() });
+    }
+    
+    #[test]
+    fn has_twitch_url() {
+        assert_eq!(find_yt_url("https://www.twitch.tv/videos/aaaaaa"), FoundUrl::Twitch{ video_id: "aaaaaa".into() });
+        assert_eq!(find_yt_url("uxbeix https://www.twitch.tv/videos/aaaaaa aoeui"), FoundUrl::Twitch{ video_id: "aaaaaa".into() });
     }
     
     #[test]
     fn wrong_host() {
-        assert_eq!(super::find_yt_url("http://www.twitch.com/watch?v=aaaaaa"), None);
-        assert_eq!(super::find_yt_url("uxbeix http://www.twitch.com/watch?v=aaaaaa aoeui"), None);
+        assert_eq!(find_yt_url("http://www.twitch.com/watch?v=aaaaaa"), FoundUrl::None);
+        assert_eq!(find_yt_url("uxbeix http://www.twitch.com/watch?v=aaaaaa aoeui"), FoundUrl::None);
     }
     
     #[test]
     fn has_email() {
-        assert_eq!(super::find_yt_url("aaaabbb@gmail.com"), None);
-        assert_eq!(super::find_yt_url("uxbeix aaaabbb@gmail.com aoeui"), None);
+        assert_eq!(find_yt_url("aaaabbb@gmail.com"), FoundUrl::None);
+        assert_eq!(find_yt_url("uxbeix aaaabbb@gmail.com aoeui"), FoundUrl::None);
     }
 }
