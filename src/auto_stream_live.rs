@@ -2,8 +2,9 @@
 use std::fmt::Debug;
 // use std::time::SystemTime;
 use std::collections::HashSet;
+use std::collections::HashMap;
+use std::time::Instant;
 // use serde::Deserialize;
-// use crate::DB;
 // use crate::{ Stream, State, Offset };
 use discord_lib::SendHandle;
 use discord_lib::discord::Snowflake;
@@ -17,7 +18,6 @@ use crate::i_love_youtube::get_stream_start_time;
 #[allow(unused_imports)]
 use crate::{from_i, to_i};
 use crate::DateTimeF;
-use crate::DState;
 use anyhow::Context;
 use anyhow::Error;
 
@@ -269,6 +269,45 @@ impl<T, E: Debug> ToSomeError<T> for Result<T, E> {
 //     upcoming: IgnoredAny,
 // }
 
+use crate::DiscordState;
+use discord_lib::Channel;
+
+pub type ChannelCache = HashMap<u64, (Option<u64>, Instant)>;
+
+async fn get_channel_guild(
+    channel_cache: &mut HashMap<u64, (Option<u64>, Instant)>,
+    states: &[DiscordState],
+    channel_id: Snowflake,
+) -> Option<Snowflake> {
+    if let Some((guild, last_fetch)) = channel_cache.get(&channel_id.0) {
+        // refetch after one day
+        if last_fetch.elapsed().as_secs() < 60*60*24 {
+            return guild.map(|id| Snowflake(id)).clone();
+        }
+    }
+    
+    // let mut from_cache = None;
+    for state in states {
+        
+        let guild_id = match state.send_handle.get_channel(channel_id).await {
+            Ok(channel) => channel.guild_id,
+            Err(err) => {
+                println!("channel failed {:?} {:?}", channel_id, err);
+                return None
+            }
+        };
+        
+        if let Some(guild_id) = guild_id {
+            channel_cache.insert(channel_id.0, (Some(guild_id.0), Instant::now()));
+            return Some(guild_id)
+        }
+    }
+    
+    channel_cache.insert(channel_id.0, (None, Instant::now()));
+    
+    None
+}
+
 pub struct GenericLive {
     pub id: String,
     pub title: String,
@@ -279,12 +318,11 @@ pub struct GenericLive {
 pub async fn process_generic(
     lives: &[GenericLive],
     active: &mut HashSet<String>,
-    send_handle: &SendHandle,
     pool: &sqlx::PgPool,
-    d_state: DState,
+    states: &[crate::DiscordState],
+    channel_cache: &mut ChannelCache,
 ) -> Result<(), Error> {
-    let mut out_messages: Vec<(Snowflake, String)> = Vec::new();
-    // let mut channel_cache: BTreeMap<u64, Channel> = BTreeMap::new();
+    let mut out_messages: Vec<(Snowflake, &SendHandle, String)> = Vec::new();
     
     for live in lives.iter() {
         if active.contains(&live.id) {
@@ -305,63 +343,34 @@ pub async fn process_generic(
             .fetch_all(&mut *transaction)
             .await.context("get subscribed channels")?;
         
-        let mut updated_channels: Vec<u64> = Vec::new();
+        let mut updated_channels: Vec<(u64, &SendHandle)> = Vec::new();
         
         for (channel_id,) in subscribed_channels {
             let channel_id = crate::from_i(channel_id);
             
-            let channel = {
-                let get_res = {
-                    let mut state = d_state.lock().await;
-                    let channel_cache = &mut state.channel_cache;
-                    channel_cache.get(&channel_id).map(|x| x.clone())
-                };
-                
-                let channel = match get_res {
-                    Some(channel) => channel,
-                    None => {
-                        let channel_sf = Snowflake(channel_id);
-                        let channel = match send_handle.get_channel(channel_sf).await {
-                                // .map_err(|e| {
-                                //     println!("channel failed {}", channel_id);
-                                //     e
-                                // })
-                                // .some_error("get channel") {
-                            Ok(channel) => channel,
-                            Err(err) => {
-                                println!("channel failed {} {:?}", channel_id, err);
-                                continue
-                            }
-                        };
-                        // println!("{:#?}", channel);
-                        {
-                            let mut state = d_state.lock().await;
-                            let channel_cache = &mut state.channel_cache;
-                            let channel = channel_cache.entry(channel_id).or_insert(channel);
-                            channel.clone()
-                        }
-                    }
-                };
-                // channel.clone()
-                channel
-            };
-            // let channel_sf = Snowflake(crate::from_i(channel_id));
-            // let channel = send_handle.get_channel(channel_sf).await.some_error("get channel")?;
-            // println!("{:#?}", channel);
-            
-            let server_id = match channel.guild_id {
-                Some(ref x) => to_i(x.0),
-                None => continue,
+            let guild_id = get_channel_guild(
+                channel_cache,
+                states,
+                Snowflake(channel_id),
+            ).await;
+            let guild_id = if let Some(guild_id) = guild_id {
+                guild_id
+            } else {
+                continue
             };
             
-            {
-                let d_state = &mut *d_state.lock().await;
-                if let Some(ref guild_id) = channel.guild_id {
-                    let in_server = d_state.servers.contains(guild_id);
-                    if !in_server {
-                        continue
-                    }
+            let mut in_any_server = false;
+            for state in states {
+                let mut servers = state.servers.lock().await;
+                let servers = &mut *servers;
+                let in_server = servers.contains(&guild_id);
+                if in_server {
+                    updated_channels.push((channel_id, &state.send_handle));
+                    in_any_server = true
                 }
+            }
+            if !in_any_server {
+                continue
             }
             
             let (stream_id,): (i32,) = sqlx::query_as(r#"
@@ -376,7 +385,7 @@ pub async fn process_generic(
                 // has server = ?
                 // https://discord.com/developers/docs/resources/channel#get-channel
                 .bind(start_time)
-                .bind(server_id)
+                .bind(to_i(guild_id.0))
                 .fetch_one(&mut *transaction).await.context("insert stream")?;
             
             sqlx::query(r#"
@@ -389,26 +398,21 @@ pub async fn process_generic(
                 .bind(stream_id)
                 .execute(&mut *transaction)
                 .await.context("set selected stream")?;
-            
-            updated_channels.push(channel_id)
         }
         
-        for channel in updated_channels.iter() {
+        for (channel, send_handle) in updated_channels.iter() {
             let msg = format!("Active stream set <{}>", stream_name);
-            // let channel = crate::from_i(*channel_i32);
-            out_messages.push((Snowflake(*channel), msg));
+            out_messages.push((Snowflake(*channel), send_handle, msg));
         }
         
         transaction.commit().await.context("transaction commit")?;
     }
     *active = lives.iter().map(|x| x.id.clone()).collect();
     
-    for (to, msg) in out_messages {
-        // send_handle.send(to, &msg.into()).await.some_error("send message")?;
+    for (to, send_handle, msg) in out_messages {
         if let Err(err) = send_handle.send(to, &msg.into()).await {
             dbg!(err);
         }
-        // send_handle.send(to, &msg.into()).await.unwrap();
     }
     
     Ok(())

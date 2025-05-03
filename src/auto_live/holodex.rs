@@ -10,8 +10,6 @@ use serde::Deserialize;
 use chrono::{ DateTime, FixedOffset };
 
 use std::collections::HashSet;
-use discord_lib::SendHandle;
-use crate::DState;
 use crate::auto_stream_live::{ GenericLive, process_generic };
 
 #[derive(Debug, Deserialize)]
@@ -85,7 +83,12 @@ async fn get_streams(api_key: &str) -> anyhow::Result<Vec<Stream>> {
     Ok(data.streams)
 }
 
-pub async fn auto_live_task(send_handle: &SendHandle, active: &mut HashSet<String>, pool: &sqlx::PgPool, d_state: DState, api_key: &str) -> anyhow::Result<()> {
+pub async fn auto_live_task(
+    active: &mut HashSet<String>, pool: &sqlx::PgPool,
+    states: &[crate::DiscordState],
+    channel_cache: &mut crate::auto_stream_live::ChannelCache,
+    api_key: &str
+) -> anyhow::Result<()> {
     let streams = get_streams(api_key).await.context("get_streams")?;
     
     let generic = streams.into_iter()
@@ -105,9 +108,9 @@ pub async fn auto_live_task(send_handle: &SendHandle, active: &mut HashSet<Strin
     process_generic(
         &generic,
         active,
-        send_handle,
         pool,
-        d_state,
+        states,
+        channel_cache,
     ).await.context("generic")?;
     
     Ok(())

@@ -179,6 +179,7 @@ pub struct Command<'a> {
     pub args: &'a [&'a str],
     pub message: &'a Message,
     pub send_handle: &'a SendHandle,
+    pub state: &'a crate::DiscordState,
     pub pool: &'a PgPool,
 }
 
@@ -217,6 +218,10 @@ pub trait Handler: Sync + Send + std::fmt::Debug {
     }
     
     async fn handle_message(&self, _msg: &Message) -> HandlerResult {
+        Ok(().into())
+    }
+    
+    async fn handle_message_b(&self, _msg: Command<'_>) -> HandlerResult {
         Ok(().into())
     }
     

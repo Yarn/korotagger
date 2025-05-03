@@ -6,19 +6,14 @@ use anyhow::{Result};
 use async_trait::async_trait;
 use linkify::{LinkFinder, LinkKind};
 
-// use discord_lib::tokio::sync::Mutex;
 use ::tokio::sync::RwLock;
-// use discord_lib::tokio::time::delay_for;
 
 use crate::i_love_youtube::extract_id as yt_extract_id;
 use crate::i_love_youtube::get_stream_info;
 use crate::twitch::extract_id as twitch_extract_id;
 use crate::{from_i, to_i};
-use crate::DState;
 
 use crate::handlers::{ Handler, HandlerResult, HandlerError, Command };
-use discord_lib::discord::Message;
-// use discord_lib::gateway::{ MessageReactionAdd, MessageReactionRemove };
 use discord_lib::discord::Snowflake;
 
 use sqlx::PgPool;
@@ -59,12 +54,10 @@ type WSubMap = Arc<RwLock<SubMap>>;
 #[derive(Debug)]
 pub struct ChannelWatchHandler {
     sub_map: WSubMap,
-    pool: PgPool,
-    d_state: DState,
 }
 
 impl ChannelWatchHandler {
-    pub fn new(pool: PgPool, d_state: DState) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         let sub_map = Arc::new(RwLock::new(SubMap::new()));
         let task_sub_map = sub_map.clone();
         
@@ -87,8 +80,8 @@ impl ChannelWatchHandler {
         
         ChannelWatchHandler {
             sub_map,
-            pool,
-            d_state,
+            // pool,
+            // d_state,
         }
     }
     
@@ -128,7 +121,10 @@ impl ChannelWatchHandler {
 
 #[async_trait]
 impl Handler for ChannelWatchHandler {
-    async fn handle_message(&self, msg: &Message) -> HandlerResult {
+    async fn handle_message_b(&self, cmd: Command<'_>) -> HandlerResult {
+        let msg = cmd.message;
+        let pool = cmd.pool;
+        
         let sub_map = self.sub_map.read().await;
         let targets = match sub_map.get(&msg.channel_id.0) {
             Some(targets) => {
@@ -195,23 +191,9 @@ impl Handler for ChannelWatchHandler {
         
         // println!("{} {:?}", stream_name, targets);
         
-        let send_handle = {
-            let d_state = self.d_state.lock().await;
-            d_state.send_handle.clone()
-        };
-        
-        let send_handle = match send_handle {
-            Some(x) => x,
-            None => {
-                eprintln!("channel watch DState does not have send_handle");
-                return Ok(().into())
-            }
-        };
-        
         for target_channel in targets {
             let channel = {
-                let mut d_state = self.d_state.lock().await;
-                d_state.get_channel(Snowflake(target_channel)).await
+                cmd.state.get_channel(Snowflake(target_channel)).await
             };
             let channel = match channel {
                 Ok(c) => c,
@@ -251,7 +233,7 @@ impl Handler for ChannelWatchHandler {
                 .bind(to_i(server_id))
                 // .bind(start_time)
                 // .bind(server_id)
-                .fetch_one(&self.pool).await;
+                .fetch_one(pool).await;
                 // .map_err(|e| {
                 //     eprintln!("channel watch insert stream {:?}", e);
                 //     HandlerError::with_message("DB error".into())
@@ -273,7 +255,7 @@ impl Handler for ChannelWatchHandler {
             "#)
                 .bind(to_i(target_channel))
                 .bind(stream_id)
-                .execute(&self.pool)
+                .execute(pool)
                 .await;
             
             match res {
@@ -286,7 +268,7 @@ impl Handler for ChannelWatchHandler {
             
             // let msg = format!("Active stream set{} <{}>", stream_info.map_or("*", |_| ""), stream_name);
             let msg = format!("Active stream set{} <{}>", if got_info {"*"} else {""}, stream_name);
-            if let Err(err) = send_handle.send(Snowflake(target_channel), &msg.into()).await {
+            if let Err(err) = cmd.state.send_handle.send(Snowflake(target_channel), &msg.into()).await {
                 dbg!(err);
             }
         }
@@ -304,7 +286,7 @@ impl Handler for ChannelWatchHandler {
         
         match op {
             "sync" => {
-                Self::sync_sub_map(&self.pool, &self.sub_map).await
+                Self::sync_sub_map(command.pool, &self.sub_map).await
                     .map_err(|err| {
                         dbg!(err);
                         HandlerError::with_message("Failed".into())
