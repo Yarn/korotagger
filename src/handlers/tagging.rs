@@ -1,23 +1,18 @@
 
 use async_trait::async_trait;
 
-// #[macro_use] use crate::handlers;
 use super::{ Handler, HandlerResult, HandlerResponse, HandlerError, SimpleHelpInfo };
 use discord_lib::discord::Message;
 use discord_lib::gateway::{ MessageReactionAdd, MessageReactionRemove };
 use crate::message_formatting::escape_embed;
 use crate::video_id::VideoId;
 
-// use crate::DB;
-// use crate::{ State, Tag };
 use crate::{ from_i, to_i };
 use crate::db_util;
 use sqlx::PgPool;
-// use time::PrimitiveDateTime as DateTime;
 use chrono::Duration;
 use crate::util::seconds_f64;
 
-// type DateTime = chrono::DateTime<chrono::offset::Utc>;
 type DateTime = chrono::NaiveDateTime;
 
 fn format_time_offset(mut time_offset: Duration, hour: &str, min: &str, sec: &str) -> String {
@@ -348,171 +343,13 @@ impl Handler for TagsHandler {
             }
         }
         
-        // for (tag_name, tag_time, tag_votes, tag_user, tag_adj) in tags.iter() {
-            
-            
-        //     let time_offset = *tag_time - stream.start_time;
-            
-        //     let mut time_offset = time_offset.whole_seconds();
-            
-        //     time_offset += *tag_adj as i64;
-        //     time_offset -= 20;
-            
-        //     for (pos, end, offset) in offsets.iter() {
-        //         if time_offset >= *pos as i64 && end.map_or(true, |x| time_offset <= x as i64) {
-        //             time_offset += *offset as i64;
-        //         }
-        //     }
-            
-        //     if limit_time && (time_offset < 0 || time_offset > 12*60*60) {
-        //         continue
-        //     }
-            
-        //     let time_offset = time::Duration::seconds(time_offset);
-            
-        //     if format_csv {
-        //         format_tag_csv(&mut out, tag_name, *tag_votes, stream_name, time_offset).map_err(|e| {
-        //             eprintln!("format csv {:?}", e);
-        //             HandlerError::with_message("error".into())
-        //         })?;
-        //     } else if format_yt {
-        //         format_tag_yt(&mut out, tag_name, *tag_votes, stream_name, time_offset);
-        //     } else {
-        //         format_tag_standard(&mut out, &video_id, tag_name, *tag_votes, stream_name, time_offset);
-        //     }
-        // }
-        
-        // pub id: i32,
-        // pub name: String,
-        // pub start_time: DateTime,
-        
-        
-        
         transaction.commit().await.map_err(|e| {
             eprintln!("transaction commit {:?}", e);
             HandlerError::with_message("DB error".into())
         })?;
         
-        
-        // {
-        //     let data = DB.borrow_data().unwrap();
-            
-        //     if stream_name == "_" {
-        //         let channel_id = msg.channel_id.0;
-                
-        //         stream_name = match data.current_stream.get(&channel_id) {
-        //             Some(s) => s,
-        //             None => {
-        //                 return Err(HandlerError::with_message("No active stream".into()))
-        //             }
-        //         }
-        //     }
-            
-        //     match data.streams.get(stream_name) {
-        //         Some(stream) => {
-        //             let time_str = stream.start_time.with_timezone(&chrono_tz::Asia::Tokyo).format("%T %Z").to_string();
-        //             // reply!(time_str.as_str());
-        //             // out = format!("{} start time: {}\n", stream_name, time_str);
-                    
-        //             for tag in stream.tags.iter().filter(|x| !x.deleted) {
-        //                 if own_tags && tag.user != user_id {
-        //                     continue
-        //                 }
-                        
-        //                 let time_offset = tag.time.signed_duration_since(stream.start_time);
-        //                 // out.push_str(&format!("{} {:?}\n", tag.name, time_offset));
-        //                 // out.push_str(&format!("{}\n", tag.name));
-                        
-        //                 let mut time_offset = time_offset.num_seconds() as i64;
-        //                 for adj in tag.adjustments.iter() {
-        //                     time_offset += adj;
-        //                 }
-        //                 for offset_adj in stream.offsets.iter() {
-        //                     if time_offset >= offset_adj.position {
-        //                         time_offset += offset_adj.offset;
-        //                     }
-        //                 }
-        //                 let mut time_offset = chrono::Duration::seconds(time_offset);
-        //                 let mut time_offset_str = String::new();
-        //                 let offset_hours = time_offset.num_hours();
-        //                 if offset_hours != 0 {
-        //                     time_offset_str.push_str(&format!("{}h", offset_hours));
-        //                     time_offset = time_offset - chrono::Duration::hours(offset_hours);
-        //                 }
-        //                 let offset_minutes = time_offset.num_minutes();
-        //                 if offset_minutes != 0 {
-        //                     time_offset_str.push_str(&format!("{}m", offset_minutes));
-        //                     time_offset = time_offset - chrono::Duration::minutes(offset_minutes);
-        //                 }
-        //                 time_offset_str.push_str(&format!("{}s", time_offset.num_seconds()));
-                        
-        //                 let offset_string = if let Some(yt_id) = extract_id(stream_name) {
-        //                     format!(
-        //                         // "[{offset}](https://www.youtube.com/watch?v={id}&t={offset})",
-        //                         "[{offset}](https://youtu.be/{id}?t={offset})",
-        //                         offset = time_offset_str,
-        //                         id = yt_id,
-        //                     )
-        //                 } else if let Some(bili_id) = bili_id(stream_name) {
-        //                     format!(
-        //                         "[{offset}](https://www.bilibili.com/video/{id}?t={offset})",
-        //                         offset = time_offset_str,
-        //                         id = bili_id,
-        //                     )
-        //                 } else {
-        //                     format!("({offset})", offset = time_offset_str)
-        //                 };
-                        
-        //                 out.push_str(&tag.name);
-        //                 out.push(' ');
-                        
-        //                 if tag.votes != 0 {
-        //                     out.push_str(&format!("({}) ", tag.votes));
-        //                 }
-                        
-        //                 out.push_str(&offset_string);
-        //                 out.push('\n');
-        //                 // if let Some(yt_id) = extract_id(stream_name) {
-        //                 //     // out.push_str(&format!("<https://www.youtube.com/watch?v={}&t={}>\n", yt_id, time_offset));
-        //                 //     out.push_str(&format!(
-        //                 //         "{name} ({votes}) \n",
-        //                 //         name = tag.name,
-        //                 //         id = yt_id,
-        //                 //         offset = time_offset_str,
-        //                 //         votes = tag.votes,
-        //                 //     ));
-        //                 // } else {
-        //                 //     // out.push_str(&format!("<{}&t={}>\n", stream_name, time_offset));
-        //                 //     out.push_str(&format!(
-        //                 //         "{name} ({votes}) \n",
-        //                 //         name = tag.name,
-        //                 //         offset = time_offset_str,
-        //                 //         votes = tag.votes,
-        //                 //     ));
-        //                 // }
-        //                 // if let Ok(time_offset) = time_offset {
-        //                 //     let mut time_offset = time_offset.as_secs() as i64;
-        //                 //     for offset_adj in stream.offsets.iter() {
-        //                 //         if time_offset >= offset_adj.position {
-        //                 //             time_offset += offset_adj.offset;
-        //                 //         }
-        //                 //     }
-        //                 //     out.push_str(&format!("<{}&t={}>\n", stream_name, time_offset));
-        //                 // }
-        //             }
-        //         }
-        //         None => {
-        //             out.push_str("stream not found");
-        //         }
-        //     }
-        // }
-        
         let res = HandlerResponse::wrapped_embed(Some("Tags"), &out);
         
-        // panic!()
-        // Err(error!(""))
-        // Ok(().into())
-        // Ok(args[1].into())
         Ok(res)
     }
     
@@ -533,34 +370,6 @@ pub struct TagHandler {
     pub delete_emoji: String,
     pub pool: PgPool,
 }
-
-// fn change_votes<T>(data: &mut State, channel_id: u64, message_id: u64, change: T)
-//     where T: Fn(u64) -> u64,
-// {
-//     if let Some(current_stream) = data.current_stream.get(&channel_id).map(|x| x.to_owned()) {
-//         let ref mut tags = data.streams.get_mut(&current_stream).unwrap().tags;
-        
-//         for tag in tags.iter_mut() {
-//             if tag.message_id == message_id {
-//                 tag.votes = change(tag.votes);
-//             }
-//         }
-//     }
-// }
-
-// fn set_deleted(data: &mut State, user_id: u64, channel_id: u64, message_id: u64, is_deleted: bool) {
-//     if let Some(current_stream) = data.current_stream.get(&channel_id).map(|x| x.to_owned()) {
-//         let ref mut tags = data.streams.get_mut(&current_stream).unwrap().tags;
-        
-//         for tag in tags.iter_mut() {
-//             if tag.message_id == message_id && user_id == tag.user {
-//                 tag.deleted = is_deleted;
-                
-//                 break
-//             }
-//         }
-//     }
-// }
 
 pub fn parse_tag_message(msg: &str) -> Option<&str> {
     let tag_name = if msg.starts_with("!") {
@@ -678,40 +487,6 @@ impl Handler for TagHandler {
             HandlerError::with_message("DB error".into())
         })?;
         
-        // let tag_name: &str = &tag_name.replace("@", "8");
-        
-        // let mut out = String::new();
-        // out.push_str("_\n");
-        // {
-        //     let mut data = DB.borrow_data_mut().unwrap();
-            
-        //     let tag = Tag {
-        //         time: Utc::now().into(),
-        //         name: tag_name.to_string(),
-        //         user: msg.author.id.0,
-        //         message_id: msg.id.0,
-        //         votes: 0,
-        //         deleted: false,
-        //         adjustments: Vec::new(),
-        //     };
-        //     let channel_id = msg.channel_id.0;
-        //     if data.current_stream.get(&channel_id).is_none() {
-        //         std::mem::drop(data);
-        //         // let res_text = "No active stream".into();
-        //         return Err(HandlerError::with_message("No active stream".into()))
-        //         // let fut = discord_obj.send(msg.channel_id, &res_text);
-        //         // if let Err(err) = fut.await {
-        //         //     dbg!("Failed to send message: {:?}", err);
-        //         // }
-        //         // continue
-        //     }
-        //     let ref current_stream = data.current_stream[&channel_id].to_string();
-        //     data.streams.get_mut(current_stream).unwrap().tags.push(tag);
-        // }
-        // DB.async_save_data().await.unwrap();
-        
-        
-        // let mut res: HandlerResponse = "_".into();
         let mut res: HandlerResponse = ().into();
         // res.add_reaction("👌");
         // res.add_reaction("🅱️ 🅱");
@@ -719,26 +494,15 @@ impl Handler for TagHandler {
         res.add_reaction(&self.vote_emoji);
         res.add_reaction(&self.delete_emoji);
         Ok(res)
-        // Err(HandlerError::with_message("".into()))
     }
     
     async fn handle_reaction_add_simple(&self, reaction: &MessageReactionAdd) {
-        // if reaction.emoji.name != self.vote_emoji {
-        //     return
-        // }
         let message_id = reaction.message_id.0;
         // let channel_id = reaction.channel_id.0;
         let user_id = reaction.user_id.0;
         
         match &reaction.emoji.name {
             emoji if emoji == &self.vote_emoji => {
-                // {
-                //     let mut data = DB.borrow_data_mut().unwrap();
-                    
-                //     change_votes(&mut *data, channel_id, message_id, |x| x + 1)
-                // }
-                // DB.async_save_data().await.unwrap();
-                
                 let res = sqlx::query(r#"
                     UPDATE tags.tags
                         SET votes = votes + 1
@@ -751,13 +515,6 @@ impl Handler for TagHandler {
                 }
             }
             emoji if emoji == &self.delete_emoji => {
-                // {
-                //     let mut data = DB.borrow_data_mut().unwrap();
-                    
-                //     set_deleted(&mut *data, user_id, channel_id, message_id, true);
-                // }
-                // DB.async_save_data().await.unwrap();
-                
                 let res = sqlx::query(r#"
                     UPDATE tags.tags
                         SET deleted = true
@@ -775,24 +532,12 @@ impl Handler for TagHandler {
     }
     
     async fn handle_reaction_remove_simple(&self, reaction: &MessageReactionRemove) {
-        // if reaction.emoji.name != self.vote_emoji {
-        //     return
-        // }
-        
         let message_id = reaction.message_id.0;
         // let channel_id = reaction.channel_id.0;
         let user_id = reaction.user_id.0;
         
         match &reaction.emoji.name {
             emoji if emoji == &self.vote_emoji => {
-                // {
-                //     let mut data = DB.borrow_data_mut().unwrap();
-                    
-                //     // use checked sub incase reactions where added while bot wasn't running
-                //     change_votes(&mut *data, channel_id, message_id, |x| x.checked_sub(1).unwrap_or(0))
-                // }
-                // DB.async_save_data().await.unwrap();
-                
                 let res = sqlx::query(r#"
                     UPDATE tags.tags
                         SET votes = votes - 1
@@ -805,13 +550,6 @@ impl Handler for TagHandler {
                 }
             }
             emoji if emoji == &self.delete_emoji => {
-                // {
-                //     let mut data = DB.borrow_data_mut().unwrap();
-                    
-                //     set_deleted(&mut *data, user_id, channel_id, message_id, false);
-                // }
-                // DB.async_save_data().await.unwrap();
-                
                 let res = sqlx::query(r#"
                     UPDATE tags.tags
                         SET deleted = false
@@ -851,22 +589,6 @@ impl Handler for AdjustHandler {
         let adjust: i64 = args.get(0)
             .and_then(|x| x.parse().ok())
             .ok_or_else(|| HandlerError::with_message("Invalid argument.".into()))?;
-        
-        // {
-        //     let mut data = DB.borrow_data_mut().unwrap();
-            
-        //     if let Some(current_stream) = data.current_stream.get(&channel_id).map(|x| x.to_owned()) {
-        //         let ref mut tags = data.streams.get_mut(&current_stream).unwrap().tags;
-                
-        //         let tag: &mut Tag = tags.iter_mut().rfind(|tag| tag.user == user)
-        //             .ok_or_else(|| HandlerError::with_message("No past tag found.".into()))?;
-                
-        //         tag.adjustments.push(adjust);
-        //     } else {
-        //         return Err(HandlerError::with_message("No active stream.".into()));
-        //     }
-        // }
-        // DB.async_save_data().await.unwrap();
         
         let mut transaction = self.pool.begin().await.map_err(|e| {
             eprintln!("transaction begin {:?}", e);
@@ -919,7 +641,5 @@ impl Handler for AdjustHandler {
         // res.add_reaction(&self.vote_emoji);
         res.add_reaction("👍");
         Ok(res)
-        
-        // Ok("_".into())
     }
 }

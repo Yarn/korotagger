@@ -4,12 +4,6 @@ use anyhow::Context;
 use serde::Deserialize;
 use url::{ Url, Host };
 
-// use discord_lib::hyper::Uri;
-// use discord_lib::{ hyper, serde_json };
-// use discord_lib::{ serde_json };
-// use hyper::{Body, Method, Request};
-// use discord_lib::bytes::buf::BufExt;
-
 use chrono::{ DateTime, FixedOffset, Utc, TimeZone };
 
 // const PATH_BEFORE: &str = r#"/i/api/graphql/ZAFnfXaKTWDvv_dh_dEs5w/AudioSpaceById?variables={"id":""#;
@@ -73,22 +67,6 @@ pub fn extract_id(stream_url: &str) -> Option<String> {
 }
 
 async fn get_guest_token(client: &reqwest::Client) -> anyhow::Result<String> {
-    // let client = discord_lib::send_message::get_client().unwrap();
-    // let client = reqwest::ClientBuilder::new()
-    //     .build()?;
-    
-    // let path = "/1.1/guest/activate.json";
-    
-    
-    // let uri = Uri::builder()
-    //     .scheme("https")
-    //     .authority("api.twitter.com")
-    //     .path_and_query(path)
-    //     .build()
-    //     .unwrap();
-    
-    
-    // let req = Request::builder()
     let req = client.post("https://api.twitter.com/1.1/guest/activate.json")
         // .method(Method::POST)
         // .uri(uri)
@@ -100,8 +78,6 @@ async fn get_guest_token(client: &reqwest::Client) -> anyhow::Result<String> {
     
     let res = client.execute(req).await.context("client get")?;
     
-    // let body = hyper::body::to_bytes(res).await?;
-    // let data: GuestToken = serde_json::from_reader(body.reader())?;
     let body: Vec<u8> = res.bytes().await?.to_vec();
     let data: GuestToken = serde_json::from_slice(&body)?;
     
@@ -110,7 +86,6 @@ async fn get_guest_token(client: &reqwest::Client) -> anyhow::Result<String> {
 
 pub async fn get_start_time(video_id: &str) -> anyhow::Result<DateTime<FixedOffset>> {
     
-    // let client = discord_lib::send_message::get_client().unwrap();
     let client = reqwest::ClientBuilder::new()
         .timeout(::std::time::Duration::from_secs(10))
         .build()?;
@@ -119,15 +94,8 @@ pub async fn get_start_time(video_id: &str) -> anyhow::Result<DateTime<FixedOffs
     
     let path = format!("{}{}{}", PATH_BEFORE, video_id, PATH_AFTER);
     
-    // let uri = Uri::builder()
-    //     .scheme("https")
-    //     .authority("twitter.com")
-    //     .path_and_query(path.as_str())
-    //     .build()
-    //     .unwrap();
     let url = format!("https://twitter.com{}", path);
     
-    // let req = Request::builder()
     let req = client.get(url)
         // .method(Method::GET)
         // .uri(uri)
@@ -138,12 +106,9 @@ pub async fn get_start_time(video_id: &str) -> anyhow::Result<DateTime<FixedOffs
         .build()
         .expect("request builder");
     
-    // let res = client.request(req).await.context("client get")?;
     let res = client.execute(req).await.context("client get")?;
-    // let body = hyper::body::to_bytes(res).await?;
     let body: Vec<u8> = res.bytes().await?.to_vec();
     
-    // let data: SpaceData = serde_json::from_reader(body.reader())?;
     let data: SpaceData = serde_json::from_slice(&body)?;
     
     let secs = data.data.audio_space.metadata.created_at / 1000;

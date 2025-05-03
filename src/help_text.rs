@@ -1,10 +1,6 @@
 
-// use async_trait::async_trait;
-// use std::sync::Arc;
 use std::collections::BTreeMap;
 use crate::handlers::Handler;
-// use crate::Message;
-// use crate::handlers::HandlerResult;
 
 pub fn get_help_text<'a>(
     handlers: &BTreeMap<&'a str, Box<dyn Handler>>,
@@ -32,17 +28,3 @@ pub fn get_help_text<'a>(
     
     out
 }
-
-// #[derive(Debug)]
-// pub struct HelpHandler {
-//     handlers: Arc<BTreeMap<&'static str, Box<dyn Handler>>>,
-//     aliases: BTreeMap<&'static str, &'static str>,
-//     prefix: &'static str,
-// }
-
-// #[async_trait]
-// impl Handler for HelpHandler {
-//     async fn handle_command(&self, args: &[&str], msg: &Message) -> HandlerResult {
-//         Ok(().into())
-//     }
-// }

@@ -2,12 +2,9 @@
 use sqlx::prelude::Executor;
 use sqlx::Postgres;
 use sqlx::postgres::PgArguments;
-// use time::PrimitiveDateTime as DateTime;
-// use chrono::Duration;
 
 use crate::to_i;
 
-// type DateTime = chrono::DateTime<chrono::offset::Utc>;
 type DateTime = chrono::NaiveDateTime;
 
 #[allow(dead_code)]
@@ -41,10 +38,6 @@ pub async fn get_stream_by_name<'c, E>(exec: E, name: &str, server_id: Option<u6
         .bind(name)
         .bind(server_id_hint.map(|x| to_i(x)))
         .fetch_optional(exec).await
-        // .map_err(|e| {
-        //     eprintln!("update start time {:?}", e);
-        //     HandlerError::with_message("DB error".into())
-        // })
         ?;
     
     let stream = match selected_stream {
@@ -74,10 +67,6 @@ pub async fn get_current_stream<'c, E>(exec: E, channel_id: u64) -> Result<Optio
     "#)
         .bind(to_i(channel_id))
         .fetch_optional(exec).await
-        // .map_err(|e| {
-        //     eprintln!("update start time {:?}", e);
-        //     HandlerError::with_message("DB error".into())
-        // })
         ?;
     
     let stream = match selected_stream {

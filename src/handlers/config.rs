@@ -4,9 +4,6 @@ use async_trait::async_trait;
 use super::{ Handler, HandlerResult, HandlerError, Command };
 use crate::get_mention_ids;
 
-// use crate::DB;
-// use std::collections::BTreeSet;
-
 use sqlx::PgPool;
 use crate::{ from_i, to_i };
 
@@ -31,17 +28,6 @@ impl Handler for SubscribeHandler {
                     .ok_or(HandlerError::with_message("Missing param".into()))?;
                 
                 let channel_id = command.message.channel_id.0;
-                
-                // {
-                //     let mut data = DB.borrow_data_mut().unwrap();
-                    
-                //     data.subscriptions
-                //         .entry(channel_id)
-                //         .or_insert_with(|| Vec::new())
-                //         .push(yt_channel_id.into())
-                //         ;
-                // }
-                // DB.async_save_config().await.unwrap();
                 
                 sqlx::query(r#"
                     INSERT INTO config.subscriptions (channel, sub_id, "type") VALUES (
@@ -87,13 +73,6 @@ impl Handler for SubscribeHandler {
             "clear" => {
                 
                 let channel_id = command.message.channel_id.0;
-                
-                // {
-                //     let mut data = DB.borrow_data_mut().unwrap();
-                    
-                //     data.subscriptions.remove(&channel_id);
-                // }
-                // DB.async_save_data().await.unwrap();
                 
                 sqlx::query(r#"
                     DELETE FROM config.subscriptions
@@ -151,19 +130,6 @@ impl Handler for ManageAdminHandler {
                 };
                 
                 let mut out: String = "_".into();
-                // {
-                //     let mut data = DB.config_state.borrow_data_mut().unwrap();
-                    
-                //     let admins = data.admin_perm
-                //         .entry(guild_id)
-                //         .or_insert_with(|| BTreeSet::new());
-                    
-                //     for new_id in new_ids {
-                //         admins.insert(new_id);
-                //         out.push_str(&format!(" {}", new_id));
-                //     }
-                // }
-                // DB.async_save_config().await.unwrap();
                 
                 let mut transaction = self.pool.begin().await.map_err(|e| {
                     eprintln!("transaction begin {:?}", e);
@@ -213,24 +179,6 @@ impl Handler for ManageAdminHandler {
                     }
                 };
                 
-                // {
-                //     let mut data = DB.config_state.borrow_data_mut().unwrap();
-                    
-                //     let admins = data.admin_perm
-                //         .entry(guild_id)
-                //         .or_insert_with(|| BTreeSet::new());
-                    
-                //     for rem_id in rem_ids {
-                //         admins.remove(&rem_id);
-                //     }
-                // }
-                // DB.async_save_config().await.unwrap();
-                
-                // let mut transaction = self.pool.begin().await.map_err(|e| {
-                //     eprintln!("transaction begin {:?}", e);
-                //     HandlerError::with_message("DB error".into())
-                // })?;
-                
                 for rem_id in rem_ids {
                     sqlx::query(r#"
                         DELETE FROM config.server_admins
@@ -243,11 +191,6 @@ impl Handler for ManageAdminHandler {
                             HandlerError::with_message("DB error".into())
                         })?;
                 }
-                
-                // transaction.commit().await.map_err(|e| {
-                //     eprintln!("transaction commit {:?}", e);
-                //     HandlerError::with_message("DB error".into())
-                // })?;
                 
                 Ok("_".into())
             }
@@ -263,19 +206,6 @@ impl Handler for ManageAdminHandler {
                 };
                 
                 let mut out = "_".to_string();
-                
-                // {
-                //     let data = DB.config_state.borrow_data().unwrap();
-                    
-                //     if let Some(admins) = data.admin_perm.get(&guild_id) {
-                //         // .entry(guild_id)
-                //         // .or_insert_with(|| BTreeSet::new());
-                    
-                //         for admin in admins.iter() {
-                //             out.push_str(&format!(" {:?}", admin));
-                //         }
-                //     }
-                // }
                 
                 let admins: Vec<(i64,)> = sqlx::query_as(r#"
                     SELECT "group"

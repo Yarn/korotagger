@@ -3,8 +3,7 @@ use std::fmt::Debug;
 use anyhow::{ Error, anyhow };
 use chrono::Duration;
 
-// use discord_lib::serde_json;
-
+#[allow(dead_code)]
 pub trait Anyway<T, E: Debug> {
     fn anyway(self) -> Result<T, Error>;
 }

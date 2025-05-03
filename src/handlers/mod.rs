@@ -73,21 +73,6 @@ impl HandlerResponse {
     }
 }
 
-// impl<'a, T: Into<NewMessage<'a>>> From<T> for HandlerResponse<'a> {
-//     fn from(msg: T) -> Self {
-//         HandlerResponse {
-//             messages: Some(vec![msg.into()]),
-//         }
-//     }
-// }
-// impl<'a> From<&dyn Into<NewMessage<'a>>> for HandlerResponse<'a> {
-//     fn from(msg: &dyn Into<NewMessage<'a>>) -> Self {
-//         HandlerResponse {
-//             messages: Some(vec![msg.into()]),
-//         }
-//     }
-// }
-
 impl From<String> for HandlerResponse {
     fn from(msg: String) -> Self {
         HandlerResponse {

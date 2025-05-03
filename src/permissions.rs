@@ -57,39 +57,6 @@ pub async fn is_msg_from_admin<'c, E>(exec: E, msg: &Message) -> Result<bool, ()
         })?;
     
     Ok(admin.is_some())
-    
-    // let guild_perms = match msg.guild_id {
-    //     Some(Snowflake(guild_id_raw)) => {
-    //         match data.admin_perm.get(&guild_id_raw) {
-    //             Some(guild_perms) => guild_perms,
-    //             None => return Ok(false)
-    //         }
-    //     }
-    //     None => return Ok(false)
-    // };
-    
-    // let Snowflake(user_id_raw) = msg.author.id;
-    
-    // if guild_perms.contains(&user_id_raw) {
-    //     return Ok(true)
-    // }
-    
-    // if let Some(ref member) = msg.member {
-    //     let ref roles = member.roles;
-    //     for Snowflake(role_id) in roles {
-    //         if guild_perms.contains(&role_id) {
-    //             return Ok(true)
-    //         }
-    //     }
-    // }
-    
-    // let is_admin = data.admin_perm
-    //     .get(&guild_id_raw)
-    //     .map(|admins| admins.contains(&user_id_raw))
-    //     .unwrap_or(false);
-    
-    // Ok(is_admin)
-    // Ok(false)
 }
 
 pub async fn is_msg_from_global_admin<'c, E>(exec: E, msg: &Message) -> Result<bool, Error>

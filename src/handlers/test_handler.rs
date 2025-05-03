@@ -6,7 +6,6 @@ use super::{ Handler, HandlerResult, HandlerResponse, HandlerError, Command };
 #[allow(unused_imports)]
 use discord_lib::discord::Message;
 use discord_lib::send_message::NewMessage;
-// use crate::permissions::is_msg_from_admin;
 
 #[derive(Debug)]
 pub struct TestHandler {
@@ -23,7 +22,6 @@ impl Handler for TestHandler {
                 return Ok("!echo".into())
             }
             Some("embed") => {
-                // let is_admin = is_msg_from_admin(&command.message).unwrap();
                 let is_admin = false;
                 
                 let text = format!("admin {:?}", is_admin);

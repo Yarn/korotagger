@@ -7,16 +7,9 @@ use crate::i_love_youtube;
 use crate::twitch;
 use crate::auto_live::twitter_spaces;
 
-// use crate::DB;
-// use crate::{
-//     Offset,
-//     Stream,
-// };
 use sqlx::PgPool;
 use crate::to_i;
-// use crate::DateTimeF;
 use chrono::Utc;
-// use time::Duration;
 use chrono::Duration;
 use chrono::DateTime;
 use chrono::FixedOffset;
@@ -29,8 +22,6 @@ pub struct SetStreamHandler {
 #[async_trait]
 impl Handler for SetStreamHandler {
     async fn handle_command_b(&self, command: Command<'_>) -> HandlerResult {
-        // command.require_admin().await?;
-        
         let stream_name = command.args.get(0).ok_or(HandlerError::with_message("Param required".into()))?;
         let stream_name = stream_name.trim_matches('<').trim_matches('>');
         
@@ -41,11 +32,6 @@ impl Handler for SetStreamHandler {
             None => stream_name.to_string()
         };
         
-        // let stream = Stream {
-        //     tags: Vec::new(),
-        //     offsets: vec![Offset { position: 0, offset: -20 }],
-        //     start_time: Utc::now().into(),
-        // };
         let start_time: chrono::NaiveDateTime = Utc::now().naive_utc();
         
         let ref server_id = command.message.guild_id.as_ref()
@@ -119,14 +105,6 @@ impl Handler for SetStreamHandler {
             HandlerError::with_message("DB error".into())
         })?;
         
-        // {
-        //     let mut data = DB.borrow_data_mut().unwrap();
-        //     let channel_id = command.message.channel_id.0;
-        //     data.current_stream.insert(channel_id, stream_name.into());
-        //     data.streams.entry(stream_name.into()).or_insert(stream);
-        // }
-        // DB.async_save_data().await.unwrap();
-        
         Ok("_".into())
     }
 }
@@ -141,15 +119,6 @@ impl Handler for ListStreamsHandler {
     async fn handle_command_b(&self, _command: Command<'_>) -> HandlerResult {
         let mut out = String::new();
         out.push_str("_\n");
-        // {
-        //     let data = DB.borrow_data().unwrap();
-        //     // data.insert(stream_name.into(), 0);
-        //     for (k, v) in data.streams.iter() {
-        //         if v.tags.len() >= 1 {
-        //             out.push_str(&format!("<{}>, {}, {} tags\n", k, v.start_time, v.tags.len()));
-        //         }
-        //     }
-        // }
         
         let streams: Vec<(String, chrono::NaiveDateTime, i64)> = sqlx::query_as(r#"
             SELECT streams.name, start_time, COUNT(tags.id) FROM tags.streams, tags.tags
@@ -255,40 +224,10 @@ impl Handler for YtStartHandler {
         
         let channel_id = command.message.channel_id.0;
         
-        // let current_stream: String = {
-        //     let data = DB.borrow_data().unwrap();
-        //     let channel_id = command.message.channel_id.0;
-        //     match data.current_stream.get(&channel_id) {
-        //         Some(s) => s.to_string(),
-        //         None => {
-        //             std::mem::drop(data);
-        //             return Ok("No active stream".into())
-        //         }
-        //     }
-        // };
-        
         let mut transaction = self.pool.begin().await.map_err(|e| {
             eprintln!("transaction begin {:?}", e);
             HandlerError::with_message("DB error".into())
         })?;
-        
-        // let selected_stream: Option<(String, i32)> = sqlx::query_as(r#"
-        //     SELECT streams.name, streams.id, * FROM config.selected_streams, tags.streams
-        //     WHERE channel = $1 and stream = streams.id;
-        // "#)
-        //     .bind(to_i(channel_id))
-        //     .fetch_optional(&mut transaction).await
-        //     .map_err(|e| {
-        //         eprintln!("update start time {:?}", e);
-        //         HandlerError::with_message("DB error".into())
-        //     })?;
-        
-        // let (current_stream, pg_stream_id) = match selected_stream {
-        //     Some(x) => x,
-        //     None => {
-        //         return Ok("No active stream".into())
-        //     }
-        // };
         
         let stream = crate::db_util::get_current_stream(&mut *transaction, channel_id)
             .await.map_err(|e| {
@@ -331,35 +270,6 @@ impl Handler for YtStartHandler {
                 eprintln!("update start time {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?;
-        // sqlx::query(r#"
-        //     UPDATE tags.streams
-        //     SET start_time = $1
-        //     WHERE "id" IN (
-        //         SELECT "stream" FROM config.selected_streams
-        //         WHERE channel = $2
-        //     )
-        // "#)
-        //     .bind(stream_start_time)
-        //     .bind(to_i(channel_id))
-        //     .execute(&self.pool).await
-        //     .map_err(|e| {
-        //         eprintln!("update start time {:?}", e);
-        //         HandlerError::with_message("DB error".into())
-        //     })?;
-        // sqlx::query(r#"
-        //     DELETE FROM tags.tag_offsets
-        //     USING tags.tags, tags.streams
-        //     WHERE
-        //         tags.id = tag_offsets.tag AND
-        //         tags.stream = streams.id AND
-        //         streams.id = $1
-        // "#)
-        //     .bind(pg_stream_id)
-        //     .execute(&mut transaction).await
-        //     .map_err(|e| {
-        //         eprintln!("update start time {:?}", e);
-        //         HandlerError::with_message("DB error".into())
-        //     })?;
         sqlx::query(r#"
             DELETE FROM tags.stream_offsets
             USING tags.streams
@@ -379,14 +289,6 @@ impl Handler for YtStartHandler {
             HandlerError::with_message("DB error".into())
         })?;
         
-        // {
-        //     let mut data = DB.borrow_data_mut().unwrap();
-            
-        //     let mut stream = data.streams.get_mut(&current_stream).unwrap();
-            
-        //     stream.start_time = stream_start_time;
-        // }
-        
         Ok("_".into())
     }
 }
@@ -399,8 +301,6 @@ pub struct TwitchStartHandler {
 #[async_trait]
 impl Handler for TwitchStartHandler {
     async fn handle_command_b(&self, command: Command<'_>) -> HandlerResult {
-        // command.require_admin().await?;
-        
         let channel_id = command.message.channel_id.0;
         
         let video_id: Option<String> = match command.args {
@@ -499,8 +399,6 @@ pub struct TwitterSpaceStartHandler {
 #[async_trait]
 impl Handler for TwitterSpaceStartHandler {
     async fn handle_command_b(&self, command: Command<'_>) -> HandlerResult {
-        // command.require_admin().await?;
-        
         let channel_id = command.message.channel_id.0;
         
         let video_id: Option<String> = match command.args {
@@ -599,8 +497,6 @@ pub struct OffsetHandler {
 #[async_trait]
 impl Handler for OffsetHandler {
     async fn handle_command_b(&self, command: Command<'_>) -> HandlerResult {
-        // command.require_admin().await?;
-        
         let args = command.args;
         
         const PARAMS_MESSAGE: &str = "Invalid params, !offset <time> <amount> [end]";
@@ -674,20 +570,6 @@ impl Handler for OffsetHandler {
                 eprintln!("insert stream offset {:?}", e);
                 HandlerError::with_message("DB error".into())
             })?;
-        
-        // {
-        //     let mut data = DB.borrow_data_mut().unwrap();
-            
-        //     let channel_id = command.message.channel_id.0;
-        //     if data.current_stream.get(&channel_id).is_none() {
-        //         std::mem::drop(data);
-        //         return Ok("No active stream".into())
-        //     }
-        //     let ref current_stream = data.current_stream[&channel_id].to_string();
-        //     data.streams.get_mut(current_stream).unwrap().offsets.push(offset);
-        // }
-        
-        // DB.async_save_data().await.unwrap();
         
         transaction.commit().await.map_err(|e| {
             eprintln!("transaction commit {:?}", e);

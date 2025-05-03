@@ -1,6 +1,5 @@
 
 use pest::Parser;
-// use pest::error::Error as PestError;
 use std::fmt;
 
 #[derive(pest_derive::Parser)]
