@@ -6,6 +6,7 @@ use crate::i_love_youtube::extract_id;
 use crate::i_love_youtube;
 use crate::twitch;
 use crate::auto_live::twitter_spaces;
+use crate::auto_live::channel_watch::normalize_url;
 
 use sqlx::PgPool;
 use crate::to_i;
@@ -25,12 +26,9 @@ impl Handler for SetStreamHandler {
         let stream_name = command.args.get(0).ok_or(HandlerError::with_message("Param required".into()))?;
         let stream_name = stream_name.trim_matches('<').trim_matches('>');
         
-        let ref stream_name = match extract_id(&stream_name) {
-            Some(yt_id) => {
-                format!("https://www.youtube.com/watch?v={}", yt_id)
-            }
-            None => stream_name.to_string()
-        };
+        let stream_name = normalize_url(&stream_name)
+            .normalized_name()
+            .unwrap_or_else(|| stream_name.to_string());
         
         let start_time: chrono::NaiveDateTime = Utc::now().naive_utc();
         

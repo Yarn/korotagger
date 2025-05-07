@@ -138,6 +138,7 @@ impl Handler for TagsHandler {
         // only displays tags after stream start and not more than 12 hours after stream start
         let limit_time = flags.contains(&"lim");
         let info_only = flags.contains(&"info");
+        let flag_literal_stream_name = flags.contains(&"lit");
         
         let as_name: Option<&str> = flags.iter().position(|&s| s == "as").and_then(|as_i| args.get(as_i+1).map(|s| (*s).trim_matches('<').trim_matches('>')));
         
@@ -186,7 +187,17 @@ impl Handler for TagsHandler {
                         }
                     }
                 };
-                let stream = db_util::get_stream_by_name(&mut *transaction, stream_name, query_server_id, Some(server_id.0))
+                
+                use std::borrow::Cow;
+                use crate::auto_live::channel_watch::normalize_url;
+                let mut stream_name = Cow::Borrowed(stream_name);
+                if !flag_literal_stream_name {
+                    if let Some(norm) = normalize_url(&stream_name).normalized_name() {
+                        stream_name = Cow::Owned(norm);
+                    }
+                }
+                
+                let stream = db_util::get_stream_by_name(&mut *transaction, &stream_name, query_server_id, Some(server_id.0))
                     .await.map_err(|e| {
                         eprintln!("get stream {:?}", e);
                         HandlerError::with_message("DB error".into())

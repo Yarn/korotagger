@@ -19,27 +19,50 @@ use discord_lib::discord::Snowflake;
 use sqlx::PgPool;
 
 #[derive(Debug, PartialEq)]
-enum FoundUrl {
-    Youtube{video_id: String},
-    Twitch{video_id: String},
+pub(crate) enum FoundUrl {
+    Youtube{ video_id: String },
+    Twitch{ video_id: String },
     None,
 }
 
-fn find_yt_url(input: &str) -> FoundUrl {
+impl FoundUrl {
+    pub fn normalized_name(&self) -> Option<String> {
+        match self {
+            FoundUrl::Youtube{ video_id } => {
+                let stream_name = format!("https://www.youtube.com/watch?v={}", video_id);
+                Some(stream_name)
+            }
+            FoundUrl::Twitch{ video_id } => {
+                let stream_name = format!("https://www.twitch.tv/videos/{}", video_id);
+                Some(stream_name)
+            }
+            FoundUrl::None => {
+                None
+            }
+        }
+    }
+}
+
+pub(crate) fn normalize_url(link: &str) -> FoundUrl {
+    if let Some(id) = yt_extract_id(link) {
+        return FoundUrl::Youtube{ video_id: id.into() }
+    }
+    if let Some(id) = twitch_extract_id(link) {
+        return FoundUrl::Twitch{ video_id: id.into() }
+    }
+    FoundUrl::None
+}
+
+pub(crate) fn find_yt_url(input: &str) -> FoundUrl {
     let mut finder = LinkFinder::new();
     finder.kinds(&[LinkKind::Url]);
     
     let links: Vec<_> = finder.links(input).collect();
     
     for link in links {
-        let link_str = link.as_str();
-        // dbg!(link_str);
-        if let Some(id) = yt_extract_id(link_str) {
-            return FoundUrl::Youtube{ video_id: id.into() }
-        }
-        if let Some(id) = twitch_extract_id(link_str) {
-            // dbg!(&id);
-            return FoundUrl::Twitch{ video_id: id.into() }
+        let found = normalize_url(link.as_str());
+        if found != FoundUrl::None {
+            return found;
         }
     }
     
