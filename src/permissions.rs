@@ -12,20 +12,13 @@ pub async fn is_msg_from_admin<'c, E>(exec: E, msg: &Message) -> Result<bool, ()
     where
         E: Executor<'c, Database = Postgres>
 {
-    // let data = DB.config_state.borrow_data().unwrap();
-    
     let guild_id = msg.guild_id.as_ref().map(|x| to_i(x.0));
     let user_id = to_i(msg.author.id.0);
     
     let mut role_query_part = String::new();
-    // let mut role_query_part_server = String::new();
     if let Some(ref member) = msg.member {
         let ref roles = member.roles;
         for Snowflake(role_id) in roles {
-            // role_query_part.push_str(&format!(
-            //     r#"admins."group" = {0} or"#,
-            //     to_i(*role_id)
-            // ));
             role_query_part.push_str(&format!(
                 r#"server_admins."group" = {0} or "#,
                 to_i(*role_id)
@@ -35,7 +28,6 @@ pub async fn is_msg_from_admin<'c, E>(exec: E, msg: &Message) -> Result<bool, ()
     if role_query_part == "" {
         role_query_part.push_str("false");
     }
-    // let role_query_part = role_query_part.strip_suffix(" or").unwrap();
     let role_query_part = role_query_part.strip_suffix(" or ").unwrap_or(&role_query_part);
     
     let query = format!(r#"
@@ -46,8 +38,6 @@ pub async fn is_msg_from_admin<'c, E>(exec: E, msg: &Message) -> Result<bool, ()
             (admins."group" = $2) or
             (({} or server_admins."group" = $2) and server = $1)
     "#, role_query_part);
-    // eprintln!("{}", query);
-    // eprintln!("{:?} {:?}", guild_id, user_id);
     
     let admin: Option<(bool,)> = sqlx::query_as(&query)
         .bind(guild_id)

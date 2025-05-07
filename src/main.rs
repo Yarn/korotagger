@@ -1,5 +1,8 @@
 
-use discord_lib::discord;
+use discord_lib::discord::{
+    self,
+    Role,
+};
 use rustbreak::FileDatabase;
 use rustbreak::deser::Ron;
 #[allow(unused_imports)]
@@ -9,6 +12,7 @@ use serde::{Serialize, Deserialize};
 use chrono::{ DateTime, FixedOffset };
 use tokio::time::sleep;
 use tokio;
+use tokio::sync::RwLock;
 use futures::FutureExt as _;
 use std::panic::AssertUnwindSafe;
 use tokio::runtime::Runtime;
@@ -36,6 +40,8 @@ use discord_lib::SendHandle;
 
 use sqlx::PgPool;
 
+use util::server_state::ServerState;
+
 type DateTimeF = DateTime<FixedOffset>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -51,6 +57,8 @@ pub struct SessionState {
     self_id: Option<u64>,
     #[serde(default)]
     guilds: HashSet<u64>,
+    #[serde(default)]
+    server_state: ServerState,
 }
 
 impl SessionState {
@@ -60,6 +68,7 @@ impl SessionState {
             seq: None,
             self_id: None,
             guilds: HashSet::new(),
+            server_state: Default::default(),
         }
     }
 }
@@ -129,6 +138,8 @@ pub struct DiscordState {
     session: Arc<FileDatabase<SessionState, Ron>>,
     #[allow(dead_code)]
     shared: Arc<FileDatabase<SharedState, Ron>>,
+    
+    server_state: Arc<RwLock<ServerState>>,
 }
 
 impl DiscordState {
@@ -142,9 +153,10 @@ impl DiscordState {
             name: Arc::new(name),
             servers: Arc::new(Mutex::new(BTreeSet::new())),
             channel_cache: Arc::new(Mutex::new(BTreeMap::new())),
-            send_handle: send_handle,
+            send_handle,
             session,
             shared,
+            server_state: Default::default(),
         }
     }
     
@@ -183,6 +195,15 @@ impl DiscordState {
         };
         
         Ok(channel)
+    }
+    
+    async fn save_server_state(&self) {
+        let state = self.server_state.read().await;
+        let mut session = self.session.borrow_data_mut().unwrap();
+        session.server_state = state.clone();
+        std::mem::drop(state);
+        std::mem::drop(session);
+        self.session.save().unwrap();
     }
 }
 
@@ -243,7 +264,7 @@ impl Bot {
     }
 }
 
-const BASE_URL: &'static str = "https://discord.com/api/v9";
+const BASE_URL: &'static str = "https://discord.com/api/v10";
 
 async fn discord_stuff() {
     let bot_config = match std::env::var("bots") {
@@ -453,7 +474,6 @@ async fn discord_stuff() {
                                 data.session_id = Some(ready.session_id.clone());
                                 data.self_id = Some(ready.user.id.0);
                             }
-                            session_state.save().unwrap();
                             self_id = Some(ready.user.id);
                             let current_guilds = {
                                 let mut servers = discord_state.servers.lock().await;
@@ -468,48 +488,9 @@ async fn discord_stuff() {
                                 let mut data = session_state.borrow_data_mut().unwrap();
                                 data.guilds = current_guilds;
                             }
-                            session_state.save().unwrap();
+                            shared_state.save_server_state().await;
                         }
-                        GM::Event(E::Unknown(event_type, event_data)) if *event_type == "GUILD_CREATE".to_string() => {
-                            // eprintln!("{:#?}", event_data);
-                            let event_data = event_data.as_object().unwrap();
-                            // owner_id
-                            // id
-                            let guild_id: u64 = event_data.get("id").unwrap().as_str().unwrap().parse().unwrap();
-                            // let owner_id: u64 = event_data.get("owner_id").unwrap().as_str().unwrap().parse().unwrap();
-                            
-                            let current_guilds = {
-                                let mut servers = discord_state.servers.lock().await;
-                                let servers = &mut *servers;
-                                servers.insert(Snowflake(guild_id));
-                                servers.iter().map(|x| x.0).collect()
-                            };
-                            // dbg!(&current_guilds);
-                            {
-                                let mut data = session_state.borrow_data_mut().unwrap();
-                                data.guilds = current_guilds;
-                            }
-                            session_state.save().unwrap();
-                        }
-                        GM::Event(E::Unknown(event_type, event_data)) if *event_type == "GUILD_DELETE".to_string() => {
-                            let event_data = event_data.as_object().unwrap();
-                            
-                            let guild_id: u64 = event_data.get("id").unwrap().as_str().unwrap().parse().unwrap();
-                            
-                            let current_guilds = {
-                                let mut servers = discord_state.servers.lock().await;
-                                let servers = &mut *servers;
-                                servers.remove(&Snowflake(guild_id));
-                                servers.iter().map(|x| x.0).collect()
-                            };
-                            dbg!(&current_guilds);
-                            {
-                                let mut data = session_state.borrow_data_mut().unwrap();
-                                data.guilds = current_guilds;
-                            }
-                            session_state.save().unwrap();
-                        }
-                        GM::Event(E::Unknown(event_type, _)) if *event_type == "RESUMED".to_string() => {
+                        GM::Event(E::Resumed) => {
                             let guilds = {
                                 let data = session_state.borrow_data().unwrap();
                                 data.guilds.iter().map(|x| Snowflake(*x)).collect()
@@ -517,6 +498,13 @@ async fn discord_stuff() {
                             let ref mut servers = discord_state.servers.lock().await;
                             let servers = &mut **servers;
                             *servers = guilds;
+                            
+                            let mut server_state = discord_state.server_state.write().await;
+                            {
+                                let data = session_state.borrow_data().unwrap();
+                                *server_state = data.server_state.clone();
+                            }
+                            std::mem::drop(server_state);
                         }
                         _ => {}
                     }
@@ -543,7 +531,6 @@ async fn discord_stuff() {
                             data.session_id = None;
                             data.seq = None;
                         }
-                        // db.async_save_session().await.unwrap();
                         session_state.save().unwrap();
                     }
                     
@@ -873,6 +860,63 @@ async fn discord_stuff() {
                     });
                 }
             }
+            GM::Event(E::MessageUpdate(msg)) => {
+                let pool = pool.clone();
+                
+                tokio::task::spawn(async move {
+                    let res = AssertUnwindSafe((|| async {
+                        let content = msg.content.as_str();
+                        
+                        let tag_name = handlers::tagging::parse_tag_message(content);
+                        let tag_name = match tag_name {
+                            Some(x) => x,
+                            None => return,
+                        };
+                        
+                        // let message_id: u64 = event_data.get("id").unwrap().as_str().unwrap().parse().unwrap();
+                        let message_id: u64 = msg.id.0;
+                        
+                        let res = sqlx::query(r#"
+                            UPDATE tags.tags
+                                SET "name" = $2
+                                WHERE message_id = $1
+                        "#)
+                            .bind(to_i(message_id))
+                            .bind(tag_name)
+                            .execute(&pool).await;
+                        if let Err(err) = res {
+                            eprintln!("edit tag {:?}", err);
+                        }
+                        
+                        // pool;
+                    })()).catch_unwind().await;
+                    if let Err(err) = res {
+                        dbg!(err);
+                    }
+                });
+            }
+            GM::Event(E::MessageDelete(msg)) => {
+                let pool = pool.clone();
+                
+                tokio::task::spawn(async move {
+                    let res = AssertUnwindSafe((|| async {
+                        let message_id: u64 = msg.id.0;
+                        
+                        let res = sqlx::query(r#"
+                            DELETE FROM tags.tags
+                                WHERE message_id = $1
+                        "#)
+                            .bind(to_i(message_id))
+                            .execute(&pool).await;
+                        if let Err(err) = res {
+                            eprintln!("edit tag {:?}", err);
+                        }
+                    })()).catch_unwind().await;
+                    if let Err(err) = res {
+                        dbg!(err);
+                    }
+                });
+            }
             GM::Event(E::MessageReactionAdd(reaction)) => {
                 if let Some(ref self_id) = self_id {
                     if &reaction.user_id == self_id {
@@ -924,76 +968,92 @@ async fn discord_stuff() {
             GM::Event(E::Ready(_)) => {
                 eprintln!("{:>10}: ready", name);
             }
+            GM::Event(E::Resumed) => {
+                eprintln!("{:>10}: resumed", name);
+            }
             GM::Event(E::PresenceUpdate(_)) => {}
             GM::Event(E::VoiceStateUpdate(_)) => {}
-            GM::Event(E::Unknown(event_type, event_data)) if event_type == "MESSAGE_UPDATE".to_string() => {
-                let pool = pool.clone();
-                // let handlers = handlers.clone();
+            GM::Event(E::GuildCreate(guild)) => {
+                // dbg!("guild create", &guild);
+                let current_guilds = {
+                    let mut servers = wrapper.state.servers.lock().await;
+                    let servers = &mut *servers;
+                    servers.insert(guild.id);
+                    servers.iter().map(|x| x.0).collect()
+                };
+                {
+                    let mut data = wrapper.state.session.borrow_data_mut().unwrap();
+                    data.guilds = current_guilds;
+                }
                 
-                // dbg!(&event_data);
-                tokio::task::spawn(async move {
-                    let res = AssertUnwindSafe((|| async {
-                        let event_data = event_data.as_object().unwrap();
-                        
-                        let content = event_data.get("content")
-                            .and_then(|v| v.as_str());
-                        let content = match content {
-                            Some(x) => x,
-                            None => return,
-                        };
-                        // if !(content.starts_with("!tag ") || content.starts_with("`")) {
-                        //     return
-                        // }
-                        let tag_name = handlers::tagging::parse_tag_message(content);
-                        let tag_name = match tag_name {
-                            Some(x) => x,
-                            None => return,
-                        };
-                        
-                        let message_id: u64 = event_data.get("id").unwrap().as_str().unwrap().parse().unwrap();
-                        
-                        let res = sqlx::query(r#"
-                            UPDATE tags.tags
-                                SET "name" = $2
-                                WHERE message_id = $1
-                        "#)
-                            .bind(to_i(message_id))
-                            .bind(tag_name)
-                            .execute(&pool).await;
-                        if let Err(err) = res {
-                            eprintln!("edit tag {:?}", err);
-                        }
-                        
-                        // pool;
-                    })()).catch_unwind().await;
-                    if let Err(err) = res {
-                        dbg!(err);
-                    }
-                });
+                let mut server_state = wrapper.state.server_state.write().await;
+                server_state.update_guild(&guild);
+                std::mem::drop(server_state);
+                
+                wrapper.state.save_server_state().await;
             }
-            GM::Event(E::Unknown(event_type, event_data)) if event_type == "MESSAGE_DELETE".to_string() => {
-                let pool = pool.clone();
+            GM::Event(E::GuildUpdate(guild)) => {
+                let mut server_state = wrapper.state.server_state.write().await;
+                server_state.update_guild(&guild);
+                std::mem::drop(server_state);
+                wrapper.state.save_server_state().await;
+            }
+            GM::Event(E::GuildDelete(guild)) => {
+                let current_guilds = {
+                    let mut servers = wrapper.state.servers.lock().await;
+                    let servers = &mut *servers;
+                    servers.remove(&guild.id);
+                    servers.iter().map(|x| x.0).collect()
+                };
+                // dbg!(&current_guilds);
+                {
+                    let mut data = wrapper.state.session.borrow_data_mut().unwrap();
+                    data.guilds = current_guilds;
+                }
+                wrapper.state.session.save().unwrap();
                 
-                tokio::task::spawn(async move {
-                    let res = AssertUnwindSafe((|| async {
-                        let event_data = event_data.as_object().unwrap();
-                        
-                        let message_id: u64 = event_data.get("id").unwrap().as_str().unwrap().parse().unwrap();
-                        
-                        let res = sqlx::query(r#"
-                            DELETE FROM tags.tags
-                                WHERE message_id = $1
-                        "#)
-                            .bind(to_i(message_id))
-                            .execute(&pool).await;
-                        if let Err(err) = res {
-                            eprintln!("edit tag {:?}", err);
-                        }
-                    })()).catch_unwind().await;
-                    if let Err(err) = res {
-                        dbg!(err);
-                    }
-                });
+                let mut server_state = wrapper.state.server_state.write().await;
+                server_state.delete_guild(guild.id);
+                std::mem::drop(server_state);
+                wrapper.state.save_server_state().await;
+            }
+            GM::Event(E::GuildRoleCreate(role)) => {
+                let mut server_state = wrapper.state.server_state.write().await;
+                server_state.update_role(role.guild_id, &role.role);
+                std::mem::drop(server_state);
+                wrapper.state.save_server_state().await;
+            }
+            GM::Event(E::GuildRoleUpdate(role)) => {
+                let mut server_state = wrapper.state.server_state.write().await;
+                server_state.update_role(role.guild_id, &role.role);
+                std::mem::drop(server_state);
+                wrapper.state.save_server_state().await;
+            }
+            GM::Event(E::GuildRoleDelete(role)) => {
+                let mut server_state = wrapper.state.server_state.write().await;
+                server_state.delete_role(role.guild_id, role.role_id);
+                std::mem::drop(server_state);
+                wrapper.state.save_server_state().await;
+            }
+            GM::Event(E::ChannelCreate(chan)) => {
+                let mut server_state = wrapper.state.server_state.write().await;
+                server_state.update_channel(&chan);
+                std::mem::drop(server_state);
+                wrapper.state.save_server_state().await;
+            }
+            GM::Event(E::ChannelUpdate(chan)) => {
+                let mut server_state = wrapper.state.server_state.write().await;
+                server_state.update_channel(&chan);
+                std::mem::drop(server_state);
+                wrapper.state.save_server_state().await;
+            }
+            GM::Event(E::ChannelDelete(chan)) => {
+                if let Some(guild) = chan.guild_id {
+                    let mut server_state = wrapper.state.server_state.write().await;
+                    server_state.delete_channel(guild, chan.id);
+                    std::mem::drop(server_state);
+                    wrapper.state.save_server_state().await;
+                }
             }
             GM::Event(E::Unknown(event_type, _)) if event_type == "MESSAGE_REACTION_REMOVE_ALL".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "MESSAGE_DELETE_BULK".to_string() => {}
@@ -1002,51 +1062,14 @@ async fn discord_stuff() {
             GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_MEMBER_UPDATE".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_BAN_ADD".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_EMOJIS_UPDATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_ROLE_CREATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_ROLE_UPDATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_ROLE_DELETE".to_string() => {}
-            GM::Event(E::Unknown(event_type, event_data)) if event_type == "GUILD_CREATE".to_string() => {
-                let event_data = event_data.as_object().unwrap();
-                // owner_id
-                // id
-                let guild_id: u64 = event_data.get("id").unwrap().as_str().unwrap().parse().unwrap();
-                let owner_id: u64 = event_data.get("owner_id").unwrap().as_str().unwrap().parse().unwrap();
-                
-                let pool = pool.clone();
-                tokio::task::spawn(async move {
-                    let res = sqlx::query(r#"
-                        INSERT INTO config.server_admins (server, "group", readable) VALUES (
-                            $1,
-                            $2,
-                            NULL
-                        )
-                        ON CONFLICT DO NOTHING;
-                    "#)
-                        .bind(to_i(guild_id))
-                        .bind(to_i(owner_id))
-                        .execute(&pool).await;
-                    
-                    if let Err(e) = res {
-                        eprintln!("owner setup {:?}", e);
-                    }
-                });
-            }
-            GM::Event(E::Unknown(event_type, _event_data)) if event_type == "GUILD_DELETE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_UPDATE".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_BAN_REMOVE".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "TYPING_START".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "CHANNEL_PINS_UPDATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "CHANNEL_UPDATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "CHANNEL_CREATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "CHANNEL_DELETE".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "INVITE_CREATE".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "INVITE_DELETE".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_JOIN_REQUEST_DELETE".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "INTEGRATION_CREATE".to_string() => {}
             GM::Event(E::Unknown(event_type, _)) if event_type == "WEBHOOKS_UPDATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "RESUMED".to_string() => {
-                eprintln!("{:>10}: resumed", name);
-            }
             GM::Raw(_msg) => {
                 // eprintln!("\n\n?RAW {:?}", _msg);
             }

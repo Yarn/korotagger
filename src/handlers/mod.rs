@@ -160,6 +160,7 @@ use crate::permissions::{
 
 pub type HandlerResult = Result<HandlerResponse, HandlerError>;
 
+#[derive(Debug)]
 pub struct Command<'a> {
     pub args: &'a [&'a str],
     pub message: &'a Message,
@@ -170,6 +171,21 @@ pub struct Command<'a> {
 
 impl Command<'_> {
     pub async fn require_admin(&self) -> Result<(), HandlerError> {
+        if let (Some(guild_id), Some(member)) = (self.message.guild_id, self.message.member.as_ref()) {
+            let state = self.state.server_state.read().await;
+            let channel_id = self.message.id;
+            let user_id = self.message.author.id;
+            
+            if let Some(permissions) = state.resolve_permissions(guild_id, channel_id, user_id, member.roles.as_slice()) {
+                const MANAGE_GUILD: u64 = 1<<5;
+                if permissions & MANAGE_GUILD == MANAGE_GUILD {
+                    return Ok(())
+                }
+            } else {
+                dbg!("error getting permissions from state", &state);
+            };
+        }
+        
         let is_admin = is_msg_from_admin(self.pool, self.message).await
             .map_err(|e| HandlerError::with_message(format!("admin check failed {:?}", e)))?;
         
