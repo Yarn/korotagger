@@ -1,8 +1,5 @@
 
-use discord_lib::discord::{
-    self,
-    Role,
-};
+use discord_lib::discord;
 use rustbreak::FileDatabase;
 use rustbreak::deser::Ron;
 #[allow(unused_imports)]
@@ -583,7 +580,6 @@ async fn discord_stuff() {
     static PLACEHOLDER_ARGS: Vec::<&'_ str> = Vec::new();
     
     loop {
-        // dbg!("loop start");
         let wrapper = recv.recv().await.unwrap();
         let msg = wrapper.msg;
         let send_handle = wrapper.state.send_handle.clone();

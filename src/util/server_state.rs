@@ -41,6 +41,7 @@ pub struct ServerState {
 }
 
 impl ServerState {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Default::default()
     }
