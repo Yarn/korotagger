@@ -754,6 +754,42 @@ async fn discord_stuff() {
                                     dbg!(err);
                                 }
                             }
+                            
+                            use handlers::Command;
+                            let command = Command {
+                                args: &PLACEHOLDER_ARGS,
+                                message: &msg,
+                                pool: &pool,
+                                send_handle: &send_handle,
+                                state: &wrapper.state,
+                            };
+                            
+                            match AssertUnwindSafe(handler.handle_message_b(command)).catch_unwind().await {
+                                Ok(Ok(res)) => {
+                                    send_response(&msg, &res, &send_handle).await;
+                                }
+                                Ok(Err(err)) => {
+                                    dbg!(handler, &err);
+                                    let send_msg: discord_lib::send_message::NewMessage = err.error_message.into();
+                                    
+                                    let to = msg.channel_id.clone();
+                                    let fut = send_handle.send(to, &send_msg);
+                                    if let Err(err) = fut.await {
+                                        dbg!("Failed to send message: {:?}", err);
+                                    }
+                                }
+                                Err(err) => {
+                                    dbg!(handler, err);
+                                    
+                                    let send_msg: discord_lib::send_message::NewMessage = "Something went very wrong".into();
+                                    
+                                    let to = msg.channel_id.clone();
+                                    let fut = send_handle.send(to, &send_msg);
+                                    if let Err(err) = fut.await {
+                                        dbg!("Failed to send message: {:?}", err);
+                                    }
+                                }
+                            }
                         }
                         
                         if let Some((command, args)) = command {
@@ -832,41 +868,6 @@ async fn discord_stuff() {
                                     }
                                 }
                                 
-                                
-                                let command = Command {
-                                    args: &PLACEHOLDER_ARGS,
-                                    message: &msg,
-                                    pool: &pool,
-                                    send_handle: &send_handle,
-                                    state: &wrapper.state,
-                                };
-                                
-                                match AssertUnwindSafe(handler.handle_message_b(command)).catch_unwind().await {
-                                    Ok(Ok(res)) => {
-                                        send_response(&msg, &res, &send_handle).await;
-                                    }
-                                    Ok(Err(err)) => {
-                                        dbg!(handler, &err);
-                                        let send_msg: discord_lib::send_message::NewMessage = err.error_message.into();
-                                        
-                                        let to = msg.channel_id.clone();
-                                        let fut = send_handle.send(to, &send_msg);
-                                        if let Err(err) = fut.await {
-                                            dbg!("Failed to send message: {:?}", err);
-                                        }
-                                    }
-                                    Err(err) => {
-                                        dbg!(handler, err);
-                                        
-                                        let send_msg: discord_lib::send_message::NewMessage = "Something went very wrong".into();
-                                        
-                                        let to = msg.channel_id.clone();
-                                        let fut = send_handle.send(to, &send_msg);
-                                        if let Err(err) = fut.await {
-                                            dbg!("Failed to send message: {:?}", err);
-                                        }
-                                    }
-                                }
                             }
                         }
                     });
