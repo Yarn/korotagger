@@ -58,7 +58,6 @@ async fn get_streams(api_key: &str) -> anyhow::Result<Vec<Stream>> {
 pub async fn auto_live_task(
     active: &mut HashSet<String>, pool: &sqlx::PgPool,
     states: &[crate::DiscordState],
-    channel_cache: &mut crate::auto_stream_live::ChannelCache,
     api_key: &str
 ) -> anyhow::Result<()> {
     let streams = get_streams(api_key).await.context("get_streams")?;
@@ -82,7 +81,6 @@ pub async fn auto_live_task(
         active,
         pool,
         states,
-        channel_cache,
     ).await.context("generic")?;
     
     Ok(())

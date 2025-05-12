@@ -22,7 +22,6 @@ struct SOverwrite {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SChannel {
-    guild: Option<Snowflake>,
     everyone_overwrite: Option<SOverwrite>,
     role_overwrites: HashMap<Snowflake, SOverwrite>,
     user_overwrites: HashMap<Snowflake, SOverwrite>,
@@ -46,6 +45,15 @@ impl ServerState {
         Default::default()
     }
     
+    pub fn get_guild_of_channel(&self, channel_id: Snowflake) -> Option<Snowflake> {
+        for (guild_id, guild) in self.guilds.iter() {
+            if let Some(_channel) = guild.channels.get(&channel_id) {
+                return Some(*guild_id);
+            }
+        }
+        None
+    }
+    
     pub fn update_guild(&mut self, guild: &Guild) {
         let ref mut state = self.guilds
             .entry(guild.id)
@@ -64,7 +72,7 @@ impl ServerState {
             self.update_role(guild.id, role);
         }
         for channel in guild.channels.iter() {
-            self.update_channel(channel)
+            self.update_channel_with_guild(guild.id, &channel)
         }
     }
     
@@ -72,10 +80,7 @@ impl ServerState {
         self.guilds.remove(&guild);
     }
     
-    pub fn update_channel(&mut self, channel: &Channel) {
-        let guild_id = if let Some(guild_id) = channel.guild_id {
-            guild_id
-        } else { return };
+    fn update_channel_with_guild(&mut self, guild_id: Snowflake, channel: &Channel) {
         let state = if let Some(state) = self.guilds.get_mut(&guild_id) {
             state
         } else { return };
@@ -107,12 +112,19 @@ impl ServerState {
         }
         
         let out = SChannel {
-            guild: channel.guild_id,
             everyone_overwrite,
             user_overwrites,
             role_overwrites,
         };
         state.channels.insert(channel.id, out);
+    }
+    
+    pub fn update_channel(&mut self, channel: &Channel) {
+        let guild_id = if let Some(guild_id) = channel.guild_id {
+            guild_id
+        } else { return };
+        
+        self.update_channel_with_guild(guild_id, channel)
     }
     
     pub fn delete_channel(&mut self, guild: Snowflake, channel: Snowflake) {

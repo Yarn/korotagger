@@ -349,12 +349,10 @@ async fn discord_stuff() {
             data.active.clone()
         };
         
-        let mut channel_cache: auto_stream_live::ChannelCache = HashMap::new();
         loop {
             let task = auto_live::holodex::auto_live_task(
                 &mut active, &task_pool,
                 states.as_slice(),
-                &mut channel_cache,
                 &holodex_api_key,
             );
             
@@ -989,6 +987,7 @@ async fn discord_stuff() {
                 wrapper.state.save_server_state().await;
             }
             GM::Event(E::GuildUpdate(guild)) => {
+                // dbg!("guild update", &guild);
                 let mut server_state = wrapper.state.server_state.write().await;
                 server_state.update_guild(&guild);
                 std::mem::drop(server_state);

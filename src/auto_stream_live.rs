@@ -1,8 +1,6 @@
 
 use std::fmt::Debug;
 use std::collections::HashSet;
-use std::collections::HashMap;
-use std::time::Instant;
 use discord_lib::SendHandle;
 use discord_lib::discord::Snowflake;
 #[allow(unused_imports)]
@@ -47,44 +45,6 @@ impl<T, E: Debug> ToSomeError<T> for Result<T, E> {
     }
 }
 
-use crate::DiscordState;
-
-pub type ChannelCache = HashMap<u64, (Option<u64>, Instant)>;
-
-async fn get_channel_guild(
-    channel_cache: &mut HashMap<u64, (Option<u64>, Instant)>,
-    states: &[DiscordState],
-    channel_id: Snowflake,
-) -> Option<Snowflake> {
-    if let Some((guild, last_fetch)) = channel_cache.get(&channel_id.0) {
-        // refetch after one day
-        if last_fetch.elapsed().as_secs() < 60*60*24 {
-            return guild.map(|id| Snowflake(id)).clone();
-        }
-    }
-    
-    // let mut from_cache = None;
-    for state in states {
-        
-        let guild_id = match state.send_handle.get_channel(channel_id).await {
-            Ok(channel) => channel.guild_id,
-            Err(err) => {
-                println!("channel failed {:?} {:?}", channel_id, err);
-                return None
-            }
-        };
-        
-        if let Some(guild_id) = guild_id {
-            channel_cache.insert(channel_id.0, (Some(guild_id.0), Instant::now()));
-            return Some(guild_id)
-        }
-    }
-    
-    channel_cache.insert(channel_id.0, (None, Instant::now()));
-    
-    None
-}
-
 pub struct GenericLive {
     pub id: String,
     pub title: String,
@@ -97,7 +57,6 @@ pub async fn process_generic(
     active: &mut HashSet<String>,
     pool: &sqlx::PgPool,
     states: &[crate::DiscordState],
-    channel_cache: &mut ChannelCache,
 ) -> Result<(), Error> {
     let mut out_messages: Vec<(Snowflake, &SendHandle, String)> = Vec::new();
     
@@ -125,30 +84,20 @@ pub async fn process_generic(
         for (channel_id,) in subscribed_channels {
             let channel_id = crate::from_i(channel_id);
             
-            let guild_id = get_channel_guild(
-                channel_cache,
-                states,
-                Snowflake(channel_id),
-            ).await;
+            let mut guild_id = None;
+            for state in states {
+                let server_state = state.server_state.read().await;
+                guild_id = server_state.get_guild_of_channel(Snowflake(channel_id));
+                if guild_id.is_some() {
+                    updated_channels.push((channel_id, &state.send_handle));
+                }
+                std::mem::drop(server_state);
+            }
             let guild_id = if let Some(guild_id) = guild_id {
                 guild_id
             } else {
                 continue
             };
-            
-            let mut in_any_server = false;
-            for state in states {
-                let mut servers = state.servers.lock().await;
-                let servers = &mut *servers;
-                let in_server = servers.contains(&guild_id);
-                if in_server {
-                    updated_channels.push((channel_id, &state.send_handle));
-                    in_any_server = true
-                }
-            }
-            if !in_any_server {
-                continue
-            }
             
             let (stream_id,): (i32,) = sqlx::query_as(r#"
                 INSERT INTO tags.streams (name, has_server, server, readable, start_time)
