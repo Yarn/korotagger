@@ -4,7 +4,6 @@ use rustbreak::FileDatabase;
 use rustbreak::deser::Ron;
 #[allow(unused_imports)]
 use std::collections::{ HashMap, HashSet, BTreeMap, BTreeSet };
-// use std::time::SystemTime;
 use serde::{Serialize, Deserialize};
 use chrono::{ DateTime, FixedOffset };
 use tokio::time::sleep;
@@ -28,10 +27,7 @@ mod util;
 mod server_settings;
 mod auto_live;
 
-use futures::lock::Mutex;
 use std::sync::Arc;
-use discord_lib::discord::Snowflake;
-use discord_lib::Channel;
 use discord_lib::SendHandle;
 
 use sqlx::PgPool;
@@ -53,8 +49,6 @@ pub struct SessionState {
     seq: Option<u64>,
     self_id: Option<u64>,
     #[serde(default)]
-    guilds: HashSet<u64>,
-    #[serde(default)]
     server_state: ServerState,
 }
 
@@ -64,7 +58,6 @@ impl SessionState {
             session_id: None,
             seq: None,
             self_id: None,
-            guilds: HashSet::new(),
             server_state: Default::default(),
         }
     }
@@ -128,8 +121,6 @@ async fn get_pool() -> Result<PgPool, GetPoolError> {
 #[derive(Debug, Clone)]
 pub struct DiscordState {
     name: Arc<String>,
-    servers: Arc<Mutex<BTreeSet<Snowflake>>>,
-    channel_cache: Arc<Mutex<BTreeMap<u64, Channel>>>,
     send_handle: Arc<SendHandle>,
     session: Arc<FileDatabase<SessionState, Ron>>,
     #[allow(dead_code)]
@@ -153,8 +144,6 @@ impl DiscordState {
     ) -> Self {
         Self {
             name: Arc::new(name),
-            servers: Arc::new(Mutex::new(BTreeSet::new())),
-            channel_cache: Arc::new(Mutex::new(BTreeMap::new())),
             send_handle: Arc::new(send_handle),
             session,
             shared,
@@ -166,40 +155,8 @@ impl DiscordState {
     }
     
     pub async fn new_session(&self) {
-        self.servers.lock().await.clear();
-    }
-    
-    pub async fn get_channel(&self, channel_id: Snowflake) -> Result<Channel, anyhow::Error> {
-        let channel_id = channel_id.0;
-        
-        let get_res = {
-            let channel_cache = self.channel_cache.lock().await;
-            channel_cache.get(&channel_id).map(|x| x.clone())
-        };
-        
-        let send_handle = &self.send_handle;
-        
-        let channel = match get_res {
-            Some(channel) => channel,
-            None => {
-                let channel_sf = Snowflake(channel_id);
-                let channel = match send_handle.get_channel(channel_sf).await {
-                    Ok(channel) => channel,
-                    Err(err) => {
-                        println!("channel failed {} {:?}", channel_id, err);
-                        return Err(anyhow::anyhow!("channel failed {} {:?}", channel_id, err))
-                    }
-                };
-                // println!("{:#?}", channel);
-                {
-                    let mut channel_cache = self.channel_cache.lock().await;
-                    let channel = channel_cache.entry(channel_id).or_insert(channel);
-                    channel.clone()
-                }
-            }
-        };
-        
-        Ok(channel)
+        let mut server_state = self.server_state.write().await;
+        *server_state = Default::default();
     }
     
     async fn save_server_state(&self) {
@@ -477,31 +434,10 @@ async fn discord_stuff() {
                                 data.self_id = Some(ready.user.id.0);
                             }
                             self_id = Some(ready.user.id);
-                            let current_guilds = {
-                                let mut servers = discord_state.servers.lock().await;
-                                let servers = &mut *servers;
-                                for guild in ready.guilds.iter() {
-                                    servers.insert(guild.id.clone());
-                                }
-                                servers.iter().map(|x| x.0).collect()
-                            };
-                            // dbg!(&current_guilds);
-                            {
-                                let mut data = session_state.borrow_data_mut().unwrap();
-                                data.guilds = current_guilds;
-                            }
                             shared_state.save_server_state().await;
                             eprintln!("{:>10}: ready", name);
                         }
                         GM::Event(E::Resumed) => {
-                            let guilds = {
-                                let data = session_state.borrow_data().unwrap();
-                                data.guilds.iter().map(|x| Snowflake(*x)).collect()
-                            };
-                            let ref mut servers = discord_state.servers.lock().await;
-                            let servers = &mut **servers;
-                            *servers = guilds;
-                            
                             let mut server_state = discord_state.server_state.write().await;
                             {
                                 let data = session_state.borrow_data().unwrap();

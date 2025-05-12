@@ -143,17 +143,6 @@ pub async fn handle_event(
         }
         E::GuildCreate(guild) => {
             // dbg!("guild create", &guild);
-            let current_guilds = {
-                let mut servers = state.servers.lock().await;
-                let servers = &mut *servers;
-                servers.insert(guild.id);
-                servers.iter().map(|x| x.0).collect()
-            };
-            {
-                let mut data = state.session.borrow_data_mut().unwrap();
-                data.guilds = current_guilds;
-            }
-            
             let mut server_state = state.server_state.write().await;
             server_state.update_guild(&guild);
             std::mem::drop(server_state);
@@ -168,19 +157,6 @@ pub async fn handle_event(
             state.save_server_state().await;
         }
         E::GuildDelete(guild) => {
-            let current_guilds = {
-                let mut servers = state.servers.lock().await;
-                let servers = &mut *servers;
-                servers.remove(&guild.id);
-                servers.iter().map(|x| x.0).collect()
-            };
-            // dbg!(&current_guilds);
-            {
-                let mut data = state.session.borrow_data_mut().unwrap();
-                data.guilds = current_guilds;
-            }
-            state.session.save().unwrap();
-            
             let mut server_state = state.server_state.write().await;
             server_state.delete_guild(guild.id);
             std::mem::drop(server_state);

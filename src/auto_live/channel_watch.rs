@@ -215,23 +215,14 @@ impl Handler for ChannelWatchHandler {
         // println!("{} {:?}", stream_name, targets);
         
         for target_channel in targets {
-            let channel = {
-                cmd.state.get_channel(Snowflake(target_channel)).await
-            };
-            let channel = match channel {
-                Ok(c) => c,
-                Err(err) => {
-                    eprintln!("cwatch get channel failed");
-                    dbg!(err);
-                    continue
-                }
-            };
-            
-            let server_id = match channel.guild_id.map(|s| s.0) {
-                Some(x) => x,
-                None => {
-                    eprintln!("cwatch not in guild target: {}", target_channel);
-                    continue
+            let server_id = {
+                let state = cmd.state.server_state.read().await;
+                match  state.get_guild_of_channel(Snowflake(target_channel)) {
+                    Some(x) => x.0,
+                    None => {
+                       eprintln!("cwatch not in guild target: {}", target_channel);
+                        continue
+                    }
                 }
             };
             
