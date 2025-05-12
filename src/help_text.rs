@@ -2,6 +2,7 @@
 use std::collections::BTreeMap;
 use crate::handlers::Handler;
 
+#[allow(dead_code)]
 pub fn get_help_text<'a>(
     handlers: &BTreeMap<&'a str, Box<dyn Handler>>,
     aliases: &BTreeMap<&'a str, &'a str>,

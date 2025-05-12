@@ -10,14 +10,13 @@ use chrono::{ DateTime, FixedOffset };
 use tokio::time::sleep;
 use tokio;
 use tokio::sync::RwLock;
-use futures::FutureExt as _;
-use std::panic::AssertUnwindSafe;
 use tokio::runtime::Runtime;
 
 mod auto_stream_live;
 mod i_love_youtube;
 mod permissions;
 mod message_formatting;
+mod message_handling;
 mod command_parsing;
 mod handlers;
 mod help_text;
@@ -38,6 +37,7 @@ use discord_lib::SendHandle;
 use sqlx::PgPool;
 
 use util::server_state::ServerState;
+use handlers::{ Handler, HandlerResult };
 
 type DateTimeF = DateTime<FixedOffset>;
 
@@ -127,14 +127,16 @@ async fn get_pool() -> Result<PgPool, GetPoolError> {
 
 #[derive(Debug, Clone)]
 pub struct DiscordState {
-    // list of guilds the bot is in
     name: Arc<String>,
     servers: Arc<Mutex<BTreeSet<Snowflake>>>,
     channel_cache: Arc<Mutex<BTreeMap<u64, Channel>>>,
-    send_handle: SendHandle,
+    send_handle: Arc<SendHandle>,
     session: Arc<FileDatabase<SessionState, Ron>>,
     #[allow(dead_code)]
     shared: Arc<FileDatabase<SharedState, Ron>>,
+    pool: PgPool,
+    handlers: Arc<BTreeMap<&'static str, Box<dyn Handler>>>,
+    command_aliases: Arc<BTreeMap<&'static str, &'static str>>,
     
     server_state: Arc<RwLock<ServerState>>,
 }
@@ -145,14 +147,20 @@ impl DiscordState {
         send_handle: SendHandle,
         session: Arc<FileDatabase<SessionState, Ron>>,
         shared: Arc<FileDatabase<SharedState, Ron>>,
+        pool: PgPool,
+        handlers: Arc<BTreeMap<&'static str, Box<dyn Handler>>>,
+        command_aliases: Arc<BTreeMap<&'static str, &'static str>>,
     ) -> Self {
         Self {
             name: Arc::new(name),
             servers: Arc::new(Mutex::new(BTreeSet::new())),
             channel_cache: Arc::new(Mutex::new(BTreeMap::new())),
-            send_handle,
+            send_handle: Arc::new(send_handle),
             session,
             shared,
+            pool,
+            handlers,
+            command_aliases,
             server_state: Default::default(),
         }
     }
@@ -223,6 +231,9 @@ impl Bot {
         session_state: Arc<FileDatabase<SessionState, Ron>>,
         name: &str,
         token: &str,
+        pool: PgPool,
+        handlers: Arc<BTreeMap<&'static str, Box<dyn Handler>>>,
+        command_aliases: Arc<BTreeMap<&'static str, &'static str>>,
     ) -> Self {
         
         
@@ -249,6 +260,9 @@ impl Bot {
             send_handle.clone(),
             session_state.clone(),
             shared_state.clone(),
+            pool,
+            handlers,
+            command_aliases,
         );
         
         let bot = Bot {
@@ -311,6 +325,60 @@ async fn discord_stuff() {
         Err(e) => panic!("{:?}", e),
     };
     
+    #[derive(Debug)]
+    struct XPotatoHandler {
+        
+    }
+    
+    use async_trait::async_trait;
+    #[async_trait]
+    impl Handler for XPotatoHandler {
+        async fn handle_command(&self, _args: &[&str], _msg: &Message) -> HandlerResult {
+            println!("xpotato");
+            panic!();
+            // Ok("xpotato".into())
+        }
+    }
+    
+    let handlers = {
+        let mut handlers:
+            BTreeMap<&'static str, Box<dyn Handler>>
+            = BTreeMap::new();
+    
+        use handlers::tagging::{ TagsHandler, TagHandler, AdjustHandler };
+        // use handlers::histogram::HistogramHandler;
+        use handlers::test_handler::TestHandler;
+        use handlers::streams::{ OffsetHandler, YtStartHandler, TwitchStartHandler, TwitterSpaceStartHandler, SetStreamHandler, ManualStartHandler };
+        use handlers::config::{ SubscribeHandler, ManageAdminHandler };
+        use handlers::jank::CopyTagsHandler;
+        // use members::handlers::{ MembersHandler, MembersAdminHandler, VerifyHandler };
+        use auto_live::channel_watch::ChannelWatchHandler;
+        // use help_text::HelpHandler;
+        
+        handlers.insert("xpotato", Box::new(XPotatoHandler {}));
+        handlers.insert("tags", Box::new(TagsHandler { pool: pool.clone() }));
+        handlers.insert("tag", Box::new(TagHandler { vote_emoji: "⭐".into(), delete_emoji: "❌".into(), pool: pool.clone() }));
+        handlers.insert("test", Box::new(TestHandler {}));
+        handlers.insert("offset", Box::new(OffsetHandler { pool: pool.clone() }));
+        handlers.insert("adjust", Box::new(AdjustHandler { pool: pool.clone() }));
+        handlers.insert("copy_tags", Box::new(CopyTagsHandler { pool: pool.clone() }));
+        handlers.insert("set_start", Box::new(ManualStartHandler { pool: pool.clone() }));
+        handlers.insert("yt_start", Box::new(YtStartHandler { pool: pool.clone() }));
+        handlers.insert("twitch_start", Box::new(TwitchStartHandler { pool: pool.clone() }));
+        handlers.insert("spaces_start", Box::new(TwitterSpaceStartHandler { pool: pool.clone() }));
+        // handlers.insert("streams", Box::new(ListStreamsHandler { pool: pool.clone() }));
+        handlers.insert("stream", Box::new(SetStreamHandler { pool: pool.clone() }));
+        handlers.insert("sub", Box::new(SubscribeHandler { pool: pool.clone() }));
+        handlers.insert("admin", Box::new(ManageAdminHandler { pool: pool.clone() }));
+        
+        handlers.insert("watch_channel", Box::new(ChannelWatchHandler::new(pool.clone())));
+        Arc::new(handlers)
+    };
+    
+    let mut command_aliases = BTreeMap::new();
+    command_aliases.insert("t", "tag");
+    let command_aliases = Arc::new(command_aliases);
+    
     let mut path = state_path.clone();
     path.push("kq_shared.ron");
     let shared_state: FileDatabase<SharedState, Ron> = FileDatabase::from_path(&path, SharedState::default()).unwrap();
@@ -333,6 +401,9 @@ async fn discord_stuff() {
             session_state,
             &config.name,
             &config.token,
+            pool.clone(),
+            handlers.clone(),
+            command_aliases.clone(),
         ).await;
         eprintln!("{:>10}: seq: {:?}", bot.state.name, bot.seq);
         bots.push(bot);
@@ -375,71 +446,7 @@ async fn discord_stuff() {
         }
     });
     
-    use handlers::{
-        Handler, HandlerResult,
-    };
-    
-    #[derive(Debug)]
-    struct XPotatoHandler {
-        
-    }
-    
-    use async_trait::async_trait;
-    #[async_trait]
-    impl Handler for XPotatoHandler {
-        async fn handle_command(&self, _args: &[&str], _msg: &Message) -> HandlerResult {
-            println!("xpotato");
-            panic!();
-            // Ok("xpotato".into())
-        }
-    }
-    
-    let mut handlers:
-        BTreeMap<&'static str, Box<dyn Handler>>
-        = BTreeMap::new();
-    
-    use handlers::tagging::{ TagsHandler, TagHandler, AdjustHandler };
-    // use handlers::histogram::HistogramHandler;
-    use handlers::test_handler::TestHandler;
-    use handlers::streams::{ OffsetHandler, YtStartHandler, TwitchStartHandler, TwitterSpaceStartHandler, SetStreamHandler, ManualStartHandler };
-    use handlers::config::{ SubscribeHandler, ManageAdminHandler };
-    use handlers::jank::CopyTagsHandler;
-    // use members::handlers::{ MembersHandler, MembersAdminHandler, VerifyHandler };
-    use auto_live::channel_watch::ChannelWatchHandler;
-    // use help_text::HelpHandler;
-    
-    handlers.insert("xpotato", Box::new(XPotatoHandler {}));
-    handlers.insert("tags", Box::new(TagsHandler { pool: pool.clone() }));
-    handlers.insert("tag", Box::new(TagHandler { vote_emoji: "⭐".into(), delete_emoji: "❌".into(), pool: pool.clone() }));
-    handlers.insert("test", Box::new(TestHandler {}));
-    handlers.insert("offset", Box::new(OffsetHandler { pool: pool.clone() }));
-    handlers.insert("adjust", Box::new(AdjustHandler { pool: pool.clone() }));
-    handlers.insert("copy_tags", Box::new(CopyTagsHandler { pool: pool.clone() }));
-    handlers.insert("set_start", Box::new(ManualStartHandler { pool: pool.clone() }));
-    handlers.insert("yt_start", Box::new(YtStartHandler { pool: pool.clone() }));
-    handlers.insert("twitch_start", Box::new(TwitchStartHandler { pool: pool.clone() }));
-    handlers.insert("spaces_start", Box::new(TwitterSpaceStartHandler { pool: pool.clone() }));
-    // handlers.insert("streams", Box::new(ListStreamsHandler { pool: pool.clone() }));
-    handlers.insert("stream", Box::new(SetStreamHandler { pool: pool.clone() }));
-    handlers.insert("sub", Box::new(SubscribeHandler { pool: pool.clone() }));
-    handlers.insert("admin", Box::new(ManageAdminHandler { pool: pool.clone() }));
-    
-    handlers.insert("watch_channel", Box::new(ChannelWatchHandler::new(pool.clone())));
-    
-    let mut command_aliases = BTreeMap::new();
-    command_aliases.insert("t", "tag");
-    
-    let handlers = Arc::new(handlers);
-    
-    struct MessageWrapper {
-        msg: discord_lib::gateway::GatewayMessage,
-        self_id: Snowflake,
-        state: Arc<DiscordState>,
-    }
-    
-    use tokio::sync::mpsc;
     async fn handle_discord_connection(
-        sender: mpsc::Sender<MessageWrapper>,
         mut bot: Bot,
     ) {
         let mut self_id = {
@@ -448,7 +455,7 @@ async fn discord_stuff() {
         };
         let ref mut discord_obj = bot.discord;
         let ref discord_state = bot.state;
-        let _name = discord_state.name.as_str();
+        let name = discord_state.name.as_str();
         let ref session_state = discord_state.session;
         
         let shared_state = Arc::new(discord_state.clone());
@@ -462,7 +469,7 @@ async fn discord_stuff() {
                     use discord_lib::gateway::GatewayMessage as GM;
                     use discord_lib::gateway::Event as E;
                     
-                    match &msg {
+                    match msg {
                         GM::Event(E::Ready(ready)) => {
                             {
                                 let mut data = session_state.borrow_data_mut().unwrap();
@@ -484,6 +491,7 @@ async fn discord_stuff() {
                                 data.guilds = current_guilds;
                             }
                             shared_state.save_server_state().await;
+                            eprintln!("{:>10}: ready", name);
                         }
                         GM::Event(E::Resumed) => {
                             let guilds = {
@@ -500,17 +508,38 @@ async fn discord_stuff() {
                                 *server_state = data.server_state.clone();
                             }
                             std::mem::drop(server_state);
+                            eprintln!("{:>10}: resumed", name);
                         }
-                        _ => {}
-                    }
-                    
-                    if let Some(self_id) = self_id {
-                        let out = MessageWrapper {
-                            msg: msg,
-                            self_id: self_id,
-                            state: Arc::clone(&shared_state),
-                        };
-                        sender.send(out).await.unwrap();
+                        GM::Hello(_) => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "MESSAGE_REACTION_REMOVE_ALL".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "MESSAGE_DELETE_BULK".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_MEMBER_ADD".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_MEMBER_REMOVE".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_MEMBER_UPDATE".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_BAN_ADD".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_EMOJIS_UPDATE".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_BAN_REMOVE".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "TYPING_START".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "CHANNEL_PINS_UPDATE".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "INVITE_CREATE".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "INVITE_DELETE".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_JOIN_REQUEST_DELETE".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "INTEGRATION_CREATE".to_string() => {}
+                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "WEBHOOKS_UPDATE".to_string() => {}
+                        GM::Event(event) => {
+                            message_handling::handle_event(
+                                event,
+                                shared_state.clone(),
+                                self_id,
+                            ).await;
+                        }
+                        
+                        GM::Raw(_msg) => {
+                            // eprintln!("\n\n?RAW {:?}", _msg);
+                        }
+                        _other => {
+                            // eprintln!("\n\n?OTHER {:?}", _other);
+                        }
                     }
                 },
                 Err(err) => {
@@ -567,511 +596,16 @@ async fn discord_stuff() {
         }
     }
     
-    let (send, mut recv) = mpsc::channel(200);
+    let mut tasks = Vec::new();
     for bot in bots.into_iter() {
-        tokio::task::spawn(handle_discord_connection(
-            send.clone(),
+        let task = tokio::task::spawn(handle_discord_connection(
             bot,
         ));
+        tasks.push(task);
     }
     
-    static PLACEHOLDER_ARGS: Vec::<&'_ str> = Vec::new();
-    
-    loop {
-        let wrapper = recv.recv().await.unwrap();
-        let msg = wrapper.msg;
-        let send_handle = wrapper.state.send_handle.clone();
-        let self_id = Some(wrapper.self_id);
-        let name = wrapper.state.name.as_str();
-        
-        use discord_lib::gateway::GatewayMessage as GM;
-        use discord_lib::gateway::Event as E;
-        
-        match msg {
-            GM::Event(E::MessageCreate(msg)) => {
-                // let ref incoming_msg = msg;
-                // let reply_macro_to = msg.channel_id.clone();
-                
-                // ignore messages from self
-                if let Some(ref self_id) = self_id {
-                    if &msg.author.id == self_id {
-                        continue;
-                    }
-                }
-                
-                // println!("-------\n\nMESSAGE CREATE");
-                // println!("{:#?}\n------------\n\n", msg);
-                let ref content = msg.content;
-                
-                // let (command, args) = command_parsing::parse_command(content).unwrap();
-                // dbg!(&command, &args);
-                
-                if false {
-                
-                } else if content == "!help" {
-                    let text = help_text::get_help_text(&*handlers, &command_aliases, "!");
-                    
-                    let send_msg: discord_lib::send_message::NewMessage = text.into();
-                    
-                    let to = msg.channel_id.clone();
-                    let fut = send_handle.send(to, &send_msg);
-                    if let Err(err) = fut.await {
-                        dbg!("Failed to send message: {:?}", err);
-                        continue
-                    }
-                } else if content == "!voice" {
-                    // let msg = r#"
-                    //     {
-                    //         "op": 4,
-                    //         "d": {
-                    //             "guild_id": "-",
-                    //             "channel_id": "-",
-                    //             "self_mute": false,
-                    //             "self_deaf": false
-                    //         }
-                    //     }
-                    // "#;
-                    
-                    // discord_obj.send_gateway_raw(msg).await.unwrap();
-                } else {
-                    
-                    let command: Option<(String, Vec<String>)> = if content.starts_with("!") && !content.starts_with("!tag ") && !content.starts_with("!t ") {
-                        let (command, args) = match command_parsing::parse_command(&msg.content) {
-                            Ok(res) => res,
-                            Err(err) => {
-                                // dbg!(&err);
-                                let err_text = format!("{}", err);
-                                let err_text = err_text.replace("`", "\u{200D}`");
-                                let err_text = format!("```{}```", err_text);
-                                
-                                let send_msg: discord_lib::send_message::NewMessage = err_text.into();
-                                
-                                let to = msg.channel_id.clone();
-                                let fut = send_handle.send(to, &send_msg);
-                                if let Err(err) = fut.await {
-                                    dbg!("Failed to send message: {:?}", err);
-                                    // continue 'msg_recv
-                                    // break
-                                }
-                                
-                                // reply!(format!("```{}```", err_text));
-                                // continue
-                                // panic!();
-                                // return
-                                continue
-                            }
-                        };
-                        
-                        let mut command = command[1..].to_string();
-                        command.make_ascii_lowercase();
-                        // let command: &str = &command;
-                        
-                        // let command = command_aliases.get(command).unwrap_or(&command);
-                        if let Some(new_command) = command_aliases.get(command.as_str()) {
-                            command = new_command.to_string()
-                        }
-                        
-                        let args: Vec<String> = args.iter().map(|x| x.to_string()).collect();
-                        
-                        let command = command.to_string();
-                        Some((command, args))
-                    } else {
-                        None
-                    };
-                    
-                    let handlers = handlers.clone();
-                    let pool = pool.clone();
-                    let send_handle = send_handle.clone();
-                    
-                    tokio::task::spawn(async move {
-                        let msg = msg;
-                        
-                        use crate::handlers::HandlerResponse;
-                        async fn send_response(msg: &Message, res: &HandlerResponse, send_handle: &SendHandle) {
-                            if let Some(ref msgs) = res.messages {
-                                for send_msg in msgs {
-                                    let to = msg.channel_id.clone();
-                                    
-                                    let fut = send_handle.send(to, &send_msg);
-                                    if let Err(err) = fut.await {
-                                        dbg!("Failed to send message: {:?}", err);
-                                    }
-                                    // delay_for(::std::time::Duration::from_millis(500)).await;
-                                }
-                            }
-                            if let Some(ref reactions) = res.reactions {
-                                for reaction in reactions {
-                                    let fut = send_handle.set_reaction(
-                                        msg.channel_id.clone(),
-                                        msg.id.clone(),
-                                        &reaction,
-                                    );
-                                    if let Err(err) = fut.await {
-                                        dbg!("Failed to set reaction: {:?}", err);
-                                    }
-                                }
-                            }
-                        }
-                        
-                        let handler_list: Vec<_> = handlers.values().collect();
-                        
-                        for handler in handler_list {
-                            match AssertUnwindSafe(handler.handle_message(&msg)).catch_unwind().await {
-                                Ok(Ok(res)) => {
-                                    send_response(&msg, &res, &send_handle).await;
-                                }
-                                Ok(Err(err)) => {
-                                    dbg!(&err);
-                                    
-                                    let send_msg: discord_lib::send_message::NewMessage = err.error_message.into();
-                                    
-                                    let to = msg.channel_id.clone();
-                                    let fut = send_handle.send(to, &send_msg);
-                                    if let Err(err) = fut.await {
-                                        dbg!("Failed to send message: {:?}", err);
-                                    }
-                                }
-                                Err(err) => {
-                                    dbg!(err);
-                                }
-                            }
-                            
-                            use handlers::Command;
-                            let command = Command {
-                                args: &PLACEHOLDER_ARGS,
-                                message: &msg,
-                                pool: &pool,
-                                send_handle: &send_handle,
-                                state: &wrapper.state,
-                            };
-                            
-                            match AssertUnwindSafe(handler.handle_message_b(command)).catch_unwind().await {
-                                Ok(Ok(res)) => {
-                                    send_response(&msg, &res, &send_handle).await;
-                                }
-                                Ok(Err(err)) => {
-                                    dbg!(handler, &err);
-                                    let send_msg: discord_lib::send_message::NewMessage = err.error_message.into();
-                                    
-                                    let to = msg.channel_id.clone();
-                                    let fut = send_handle.send(to, &send_msg);
-                                    if let Err(err) = fut.await {
-                                        dbg!("Failed to send message: {:?}", err);
-                                    }
-                                }
-                                Err(err) => {
-                                    dbg!(handler, err);
-                                    
-                                    let send_msg: discord_lib::send_message::NewMessage = "Something went very wrong".into();
-                                    
-                                    let to = msg.channel_id.clone();
-                                    let fut = send_handle.send(to, &send_msg);
-                                    if let Err(err) = fut.await {
-                                        dbg!("Failed to send message: {:?}", err);
-                                    }
-                                }
-                            }
-                        }
-                        
-                        if let Some((command, args)) = command {
-                            let command: &str = &command;
-                            let args: Vec<&str> = args.iter().map(|x| x.as_str()).collect();
-                            
-                            if let Some(handler) = handlers.get(command) {
-                                match AssertUnwindSafe(handler.handle_command(&args, &msg)).catch_unwind().await {
-                                    Ok(Ok(res)) => {
-                                        send_response(&msg, &res, &send_handle).await;
-                                    }
-                                    Ok(Err(err)) => {
-                                        dbg!(command, &err);
-                                        // reply!(err.error_message);
-                                        let send_msg: discord_lib::send_message::NewMessage = err.error_message.into();
-                                        
-                                        let to = msg.channel_id.clone();
-                                        let fut = send_handle.send(to, &send_msg);
-                                        if let Err(err) = fut.await {
-                                            dbg!("Failed to send message: {:?}", err);
-                                            // continue 'msg_recv
-                                            // break
-                                        }
-                                    }
-                                    Err(err) => {
-                                        dbg!(err);
-                                        
-                                        let send_msg: discord_lib::send_message::NewMessage = "Something went very wrong".into();
-                                        
-                                        let to = msg.channel_id.clone();
-                                        let fut = send_handle.send(to, &send_msg);
-                                        if let Err(err) = fut.await {
-                                            dbg!("Failed to send message: {:?}", err);
-                                            // continue 'msg_recv
-                                            // break
-                                        }
-                                    }
-                                }
-                                
-                                use handlers::Command;
-                                let command = Command {
-                                    args: &args,
-                                    message: &msg,
-                                    pool: &pool,
-                                    send_handle: &send_handle,
-                                    state: &wrapper.state,
-                                };
-                                
-                                match AssertUnwindSafe(handler.handle_command_b(command)).catch_unwind().await {
-                                    Ok(Ok(res)) => {
-                                        send_response(&msg, &res, &send_handle).await;
-                                    }
-                                    Ok(Err(err)) => {
-                                        dbg!(handler, &err);
-                                        // reply!(err.error_message);
-                                        let send_msg: discord_lib::send_message::NewMessage = err.error_message.into();
-                                        
-                                        let to = msg.channel_id.clone();
-                                        let fut = send_handle.send(to, &send_msg);
-                                        if let Err(err) = fut.await {
-                                            dbg!("Failed to send message: {:?}", err);
-                                            // continue 'msg_recv
-                                            // break
-                                        }
-                                    }
-                                    Err(err) => {
-                                        dbg!(handler, err);
-                                        
-                                        let send_msg: discord_lib::send_message::NewMessage = "Something went very wrong".into();
-                                        
-                                        let to = msg.channel_id.clone();
-                                        let fut = send_handle.send(to, &send_msg);
-                                        if let Err(err) = fut.await {
-                                            dbg!("Failed to send message: {:?}", err);
-                                        }
-                                    }
-                                }
-                                
-                            }
-                        }
-                    });
-                }
-            }
-            GM::Event(E::MessageUpdate(msg)) => {
-                let pool = pool.clone();
-                
-                tokio::task::spawn(async move {
-                    let res = AssertUnwindSafe((|| async {
-                        let content = msg.content.as_str();
-                        
-                        let tag_name = handlers::tagging::parse_tag_message(content);
-                        let tag_name = match tag_name {
-                            Some(x) => x,
-                            None => return,
-                        };
-                        
-                        // let message_id: u64 = event_data.get("id").unwrap().as_str().unwrap().parse().unwrap();
-                        let message_id: u64 = msg.id.0;
-                        
-                        let res = sqlx::query(r#"
-                            UPDATE tags.tags
-                                SET "name" = $2
-                                WHERE message_id = $1
-                        "#)
-                            .bind(to_i(message_id))
-                            .bind(tag_name)
-                            .execute(&pool).await;
-                        if let Err(err) = res {
-                            eprintln!("edit tag {:?}", err);
-                        }
-                        
-                        // pool;
-                    })()).catch_unwind().await;
-                    if let Err(err) = res {
-                        dbg!(err);
-                    }
-                });
-            }
-            GM::Event(E::MessageDelete(msg)) => {
-                let pool = pool.clone();
-                
-                tokio::task::spawn(async move {
-                    let res = AssertUnwindSafe((|| async {
-                        let message_id: u64 = msg.id.0;
-                        
-                        let res = sqlx::query(r#"
-                            DELETE FROM tags.tags
-                                WHERE message_id = $1
-                        "#)
-                            .bind(to_i(message_id))
-                            .execute(&pool).await;
-                        if let Err(err) = res {
-                            eprintln!("edit tag {:?}", err);
-                        }
-                    })()).catch_unwind().await;
-                    if let Err(err) = res {
-                        dbg!(err);
-                    }
-                });
-            }
-            GM::Event(E::MessageReactionAdd(reaction)) => {
-                if let Some(ref self_id) = self_id {
-                    if &reaction.user_id == self_id {
-                        continue;
-                    }
-                }
-                
-                // eprintln!("reaction {:#?}", reaction);
-                let handlers = handlers.clone();
-                
-                tokio::task::spawn(async move {
-                    let handler_list: Vec<_> = handlers.values().collect();
-                    
-                    for handler in handler_list.iter() {
-                        match AssertUnwindSafe(handler.handle_reaction_add_simple(&reaction)).catch_unwind().await {
-                            Ok(()) => {}
-                            Err(err) => {
-                                dbg!(handler, err);
-                            }
-                        }
-                    }
-                });
-            }
-            GM::Event(E::MessageReactionRemove(reaction)) => {
-                if let Some(ref self_id) = self_id {
-                    if &reaction.user_id == self_id {
-                        continue;
-                    }
-                }
-                
-                // eprintln!("reaction remove {:?}", reaction);
-                let handlers = handlers.clone();
-                
-                tokio::task::spawn(async move {
-                    let handler_list: Vec<_> = handlers.values().collect();
-                    
-                    for handler in handler_list.iter() {
-                        match AssertUnwindSafe(handler.handle_reaction_remove_simple(&reaction)).catch_unwind().await {
-                            Ok(()) => {}
-                            Err(err) => {
-                                dbg!(handler, err);
-                            }
-                        }
-                    }
-                });
-            }
-            
-            GM::Hello(_) => {}
-            GM::Event(E::Ready(_)) => {
-                eprintln!("{:>10}: ready", name);
-            }
-            GM::Event(E::Resumed) => {
-                eprintln!("{:>10}: resumed", name);
-            }
-            GM::Event(E::PresenceUpdate(_)) => {}
-            GM::Event(E::VoiceStateUpdate(_)) => {}
-            GM::Event(E::GuildCreate(guild)) => {
-                // dbg!("guild create", &guild);
-                let current_guilds = {
-                    let mut servers = wrapper.state.servers.lock().await;
-                    let servers = &mut *servers;
-                    servers.insert(guild.id);
-                    servers.iter().map(|x| x.0).collect()
-                };
-                {
-                    let mut data = wrapper.state.session.borrow_data_mut().unwrap();
-                    data.guilds = current_guilds;
-                }
-                
-                let mut server_state = wrapper.state.server_state.write().await;
-                server_state.update_guild(&guild);
-                std::mem::drop(server_state);
-                
-                wrapper.state.save_server_state().await;
-            }
-            GM::Event(E::GuildUpdate(guild)) => {
-                // dbg!("guild update", &guild);
-                let mut server_state = wrapper.state.server_state.write().await;
-                server_state.update_guild(&guild);
-                std::mem::drop(server_state);
-                wrapper.state.save_server_state().await;
-            }
-            GM::Event(E::GuildDelete(guild)) => {
-                let current_guilds = {
-                    let mut servers = wrapper.state.servers.lock().await;
-                    let servers = &mut *servers;
-                    servers.remove(&guild.id);
-                    servers.iter().map(|x| x.0).collect()
-                };
-                // dbg!(&current_guilds);
-                {
-                    let mut data = wrapper.state.session.borrow_data_mut().unwrap();
-                    data.guilds = current_guilds;
-                }
-                wrapper.state.session.save().unwrap();
-                
-                let mut server_state = wrapper.state.server_state.write().await;
-                server_state.delete_guild(guild.id);
-                std::mem::drop(server_state);
-                wrapper.state.save_server_state().await;
-            }
-            GM::Event(E::GuildRoleCreate(role)) => {
-                let mut server_state = wrapper.state.server_state.write().await;
-                server_state.update_role(role.guild_id, &role.role);
-                std::mem::drop(server_state);
-                wrapper.state.save_server_state().await;
-            }
-            GM::Event(E::GuildRoleUpdate(role)) => {
-                let mut server_state = wrapper.state.server_state.write().await;
-                server_state.update_role(role.guild_id, &role.role);
-                std::mem::drop(server_state);
-                wrapper.state.save_server_state().await;
-            }
-            GM::Event(E::GuildRoleDelete(role)) => {
-                let mut server_state = wrapper.state.server_state.write().await;
-                server_state.delete_role(role.guild_id, role.role_id);
-                std::mem::drop(server_state);
-                wrapper.state.save_server_state().await;
-            }
-            GM::Event(E::ChannelCreate(chan)) => {
-                let mut server_state = wrapper.state.server_state.write().await;
-                server_state.update_channel(&chan);
-                std::mem::drop(server_state);
-                wrapper.state.save_server_state().await;
-            }
-            GM::Event(E::ChannelUpdate(chan)) => {
-                let mut server_state = wrapper.state.server_state.write().await;
-                server_state.update_channel(&chan);
-                std::mem::drop(server_state);
-                wrapper.state.save_server_state().await;
-            }
-            GM::Event(E::ChannelDelete(chan)) => {
-                if let Some(guild) = chan.guild_id {
-                    let mut server_state = wrapper.state.server_state.write().await;
-                    server_state.delete_channel(guild, chan.id);
-                    std::mem::drop(server_state);
-                    wrapper.state.save_server_state().await;
-                }
-            }
-            GM::Event(E::Unknown(event_type, _)) if event_type == "MESSAGE_REACTION_REMOVE_ALL".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "MESSAGE_DELETE_BULK".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_MEMBER_ADD".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_MEMBER_REMOVE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_MEMBER_UPDATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_BAN_ADD".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_EMOJIS_UPDATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_BAN_REMOVE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "TYPING_START".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "CHANNEL_PINS_UPDATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "INVITE_CREATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "INVITE_DELETE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "GUILD_JOIN_REQUEST_DELETE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "INTEGRATION_CREATE".to_string() => {}
-            GM::Event(E::Unknown(event_type, _)) if event_type == "WEBHOOKS_UPDATE".to_string() => {}
-            GM::Raw(_msg) => {
-                // eprintln!("\n\n?RAW {:?}", _msg);
-            }
-            _other => {
-                // eprintln!("\n\n?OTHER {:?}", _other);
-            }
-        }
+    for task in tasks {
+        task.await.unwrap();
     }
 }
 
