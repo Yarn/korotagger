@@ -176,14 +176,17 @@ impl Command<'_> {
             let channel_id = self.message.id;
             let user_id = self.message.author.id;
             
-            if let Some(permissions) = state.resolve_permissions(guild_id, channel_id, user_id, member.roles.as_slice()) {
-                const MANAGE_GUILD: u64 = 1<<5;
-                if permissions & MANAGE_GUILD == MANAGE_GUILD {
-                    return Ok(())
+            match state.resolve_permissions(guild_id, channel_id, user_id, member.roles.as_slice()) {
+                Ok(permissions) => {
+                    const MANAGE_GUILD: u64 = 1<<5;
+                    if permissions & MANAGE_GUILD == MANAGE_GUILD {
+                        return Ok(())
+                    }
                 }
-            } else {
-                dbg!("error getting permissions from state", &state);
-            };
+                Err(err_msg) => {
+                    dbg!(format!("error getting permissions from state: g:{guild_id:?} c:{channel_id:?} u:{user_id:?} {err_msg}"));
+                }
+            }
         }
         
         let is_admin = is_msg_from_admin(self.pool, self.message).await

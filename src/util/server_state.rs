@@ -157,7 +157,7 @@ impl ServerState {
         state.roles.remove(&role);
     }
     
-    pub fn resolve_permissions(&self, guild: Snowflake, channel: Snowflake, user: Snowflake, roles: &[Snowflake]) -> Option<u64> {
+    pub fn resolve_permissions(&self, guild: Snowflake, channel: Snowflake, user: Snowflake, roles: &[Snowflake]) -> Result<u64, String> {
         const ADMINISTRATOR: u64 = 0x0000000000000008;
         const ALL: u64 = {
             let mut acc = 0;
@@ -174,28 +174,28 @@ impl ServerState {
         let guild_id = guild;
         let channel_id = channel;
         let user_id = user;
-        let guild = self.guilds.get(&guild_id)?;
+        let guild = self.guilds.get(&guild_id).ok_or_else(|| format!("guild not found {guild_id:?}"))?;
         
         let is_owner = user_id == guild.owner;
         
         if is_owner {
-            return Some(ALL);
+            return Ok(ALL);
         }
         
-        let everyone_role = guild.roles.get(&guild_id)?;
+        let everyone_role = guild.roles.get(&guild_id).ok_or_else(|| format!("everyone role not found {guild_id:?}"))?;
         
         let mut permissions = everyone_role.permissions;
         
         for role_id in roles.iter() {
-            let role = guild.roles.get(role_id)?;
+            let role = guild.roles.get(role_id).ok_or_else(|| format!("role not found {role_id:?} in guild {guild_id:?}"))?;
             permissions |= role.permissions;
         }
         
         if permissions & ADMINISTRATOR == ADMINISTRATOR {
-            return Some(ALL);
+            return Ok(ALL);
         }
         
-        let channel = guild.channels.get(&channel_id)?;
+        let channel = guild.channels.get(&channel_id).ok_or_else(|| format!("channel not found {channel_id:?} in guild {guild_id:?}"))?;
         
         if let Some(ref ov) = channel.everyone_overwrite {
             permissions &= !ov.deny;
@@ -219,7 +219,7 @@ impl ServerState {
             permissions |= overwrite.allow;
         }
         
-        Some(permissions)
+        Ok(permissions)
     }
 }
 
