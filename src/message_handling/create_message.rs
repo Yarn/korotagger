@@ -21,7 +21,11 @@ pub async fn handle_message_create(
     
     let ref content = msg.content;
     
+    #[inline(always)]
     fn extract_command(content: &str, command_aliases: &BTreeMap<&str, &str>) -> Result<Option<(String, Vec<String>)>, String> {
+        if !content.starts_with("!") {
+            return Ok(None)
+        }
         if content.starts_with("!tag ") || content.starts_with("!t ") {
             return Ok(None)
         }

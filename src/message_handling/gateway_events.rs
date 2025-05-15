@@ -142,7 +142,7 @@ pub async fn handle_event(
             });
         }
         E::GuildCreate(guild) => {
-            // dbg!("guild create", &guild);
+            // dbg!("guild create", guild.id);
             let mut server_state = state.server_state.write().await;
             server_state.update_guild(&guild);
             std::mem::drop(server_state);
@@ -150,49 +150,56 @@ pub async fn handle_event(
             state.save_server_state().await;
         }
         E::GuildUpdate(guild) => {
-            // dbg!("guild update", &guild);
+            // dbg!("guild update", guild.id);
             let mut server_state = state.server_state.write().await;
             server_state.update_guild(&guild);
             std::mem::drop(server_state);
             state.save_server_state().await;
         }
         E::GuildDelete(guild) => {
+            // dbg!("guild delete", guild.id);
             let mut server_state = state.server_state.write().await;
             server_state.delete_guild(guild.id);
             std::mem::drop(server_state);
             state.save_server_state().await;
         }
         E::GuildRoleCreate(role) => {
+            // dbg!("guild role create", role.guild_id);
             let mut server_state = state.server_state.write().await;
             server_state.update_role(role.guild_id, &role.role);
             std::mem::drop(server_state);
             state.save_server_state().await;
         }
         E::GuildRoleUpdate(role) => {
+            // dbg!("guild role update", role.guild_id);
             let mut server_state = state.server_state.write().await;
             server_state.update_role(role.guild_id, &role.role);
             std::mem::drop(server_state);
             state.save_server_state().await;
         }
         E::GuildRoleDelete(role) => {
+            // dbg!("guild role delete", role.guild_id);
             let mut server_state = state.server_state.write().await;
             server_state.delete_role(role.guild_id, role.role_id);
             std::mem::drop(server_state);
             state.save_server_state().await;
         }
         E::ChannelCreate(chan) => {
+            // dbg!("channel create", chan.guild_id);
             let mut server_state = state.server_state.write().await;
             server_state.update_channel(&chan);
             std::mem::drop(server_state);
             state.save_server_state().await;
         }
         E::ChannelUpdate(chan) => {
+            // dbg!("channel update", chan.guild_id);
             let mut server_state = state.server_state.write().await;
             server_state.update_channel(&chan);
             std::mem::drop(server_state);
             state.save_server_state().await;
         }
         E::ChannelDelete(chan) => {
+            // dbg!("channel delete", chan.guild_id);
             if let Some(guild) = chan.guild_id {
                 let mut server_state = state.server_state.write().await;
                 server_state.delete_channel(guild, chan.id);

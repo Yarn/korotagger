@@ -17,7 +17,7 @@ rustbreak = { version = "=2.0.0-rc3", features = ["ron_enc"] }
 # sqlparser = { version = "*", features = ["serde"] }
 
 futures = "0.3"
-tokio = { version = "1", features = ["time", "rt", "rt-multi-thread"] }
+tokio = { version = "1", features = ["time", "rt", "rt-multi-thread", "signal", "macros"] }
 
 # sqlx = { version = "0.4.0-beta.1", default-features = false, features = [ "runtime-tokio-rustls", "macros", "chrono", "time", "tls", "postgres", "migrate" ] }
 sqlx = { version = "0.7.3", default-features = false, features = [ "runtime-tokio", "runtime-tokio-rustls", "tls-rustls", "macros", "chrono", "postgres", "migrate" ] }
