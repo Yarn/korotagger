@@ -86,12 +86,17 @@ pub async fn process_generic(
             
             let mut guild_id = None;
             for state in states {
-                let server_state = state.server_state.read().await;
-                guild_id = server_state.get_guild_of_channel(Snowflake(channel_id));
-                if guild_id.is_some() {
-                    updated_channels.push((channel_id, &state.send_handle));
+                match crate::ServerState::get_guild_of_channel(&state.server_state, Snowflake(channel_id)).await {
+                    Ok(_guild_id) => {
+                        dbg!(guild_id);
+                        guild_id = Some(_guild_id);
+                        updated_channels.push((channel_id, &state.send_handle));
+                        break;
+                    }
+                    Err(err) => {
+                        eprintln!("[{}:{}:{}] ch:{:?} {:?}", file!(), line!(), column!(), channel_id, err);
+                    }
                 }
-                std::mem::drop(server_state);
             }
             let guild_id = if let Some(guild_id) = guild_id {
                 guild_id

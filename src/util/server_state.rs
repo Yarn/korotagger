@@ -1,9 +1,13 @@
 
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use miette::miette;
 
 use serde::{ Serialize, Deserialize };
 
 use discord_lib::discord::{ Snowflake, Guild, Role, Channel, OverwriteType };
+use discord_lib::SendHandle;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SRole {
@@ -29,7 +33,7 @@ struct SChannel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SGuild {
-    owner: Snowflake,
+    owner: Option<Snowflake>,
     roles: HashMap<Snowflake, SRole>,
     channels: HashMap<Snowflake, SChannel>,
 }
@@ -37,6 +41,10 @@ struct SGuild {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ServerState {
     guilds: HashMap<Snowflake, SGuild>,
+    #[serde(default)]
+    unavailable_channels: HashSet<Snowflake>,
+    #[serde(skip)]
+    pub(crate) send_handle: Option<Arc<SendHandle>>,
 }
 
 impl ServerState {
@@ -45,7 +53,71 @@ impl ServerState {
         Default::default()
     }
     
-    pub fn get_guild_of_channel(&self, channel_id: Snowflake) -> Option<Snowflake> {
+    pub async fn get_guild_of_channel(locked: &RwLock<Self>, channel_id: Snowflake) -> miette::Result<Snowflake> {
+        let state = locked.read().await;
+        
+        if state.unavailable_channels.contains(&channel_id) {
+            return Err(miette!("get_channel marked invalid {:?}", channel_id));
+        }
+        
+        let res = state.get_cached_guild_of_channel(channel_id);
+        if let Some(guild_id) = res {
+            return Ok(guild_id);
+        }
+        let send_handle = state.send_handle.as_ref()
+            .ok_or_else(|| miette!("send_handle not set when looking up guild for channel {:?}", channel_id))?.clone();
+        std::mem::drop(state);
+        
+        let channel = match send_handle.get_channel(channel_id).await {
+            Ok(channel) => channel,
+            Err(err @ discord_lib::send_message::Error::DiscordError{status_code, ..}) => {
+                let mut state = locked.write().await;
+                // see note on same code below
+                let res = state.get_cached_guild_of_channel(channel_id);
+                if let Some(guild_id) = res {
+                    return Ok(guild_id);
+                }
+                match status_code.as_u16() {
+                    403 | 404 => {
+                        state.unavailable_channels.insert(channel_id);
+                        return Err(miette!("get_channel error (marking invalid) {:?}", err));
+                    }
+                    _ => {
+                        return Err(miette!("get_channel error {:?}", err));
+                    }
+                }
+                
+            }
+            Err(err) => {
+                return Err(miette!("get_channel error {:?}", err));
+            }
+        };
+        
+        let guild_id = channel.guild_id.ok_or_else(|| miette!("channel not part of guild"))?;
+        
+        let channel = discord_lib::discord::Channel {
+            id: channel.id,
+            guild_id: None,
+            permission_overwrites: channel.permission_overwrites,
+        };
+        
+        let mut state = locked.write().await;
+        
+        // check to make sure an update_channel hasn't happened while making the api call
+        // this can presumably still be reached while an update_channel is in transit that reflects
+        // a newer state than the api call
+        let res = state.get_cached_guild_of_channel(channel_id);
+        if let Some(guild_id) = res {
+            return Ok(guild_id);
+        }
+        
+        state.update_channel_with_guild(guild_id, &channel);
+        std::mem::drop(state);
+        
+        Ok(guild_id)
+    }
+    
+    fn get_cached_guild_of_channel(&self, channel_id: Snowflake) -> Option<Snowflake> {
         for (guild_id, guild) in self.guilds.iter() {
             if let Some(_channel) = guild.channels.get(&channel_id) {
                 return Some(*guild_id);
@@ -54,19 +126,29 @@ impl ServerState {
         None
     }
     
+    pub fn mark_guild_exists(&mut self, guild_id: Snowflake) {
+        self.guilds.entry(guild_id).or_insert_with(|| {
+            SGuild {
+                owner: None,
+                roles: HashMap::new(),
+                channels: HashMap::new(),
+            }
+        });
+    }
+    
     pub fn update_guild(&mut self, guild: &Guild) {
-        let ref mut state = self.guilds
+        let state = self.guilds
             .entry(guild.id)
             .or_insert_with(|| {
                 SGuild {
-                    owner: guild.owner_id,
+                    owner: None,
                     roles: HashMap::new(),
                     channels: HashMap::new(),
                 }
             });
         
+        state.owner = Some(guild.owner_id);
         state.roles.clear();
-        state.channels.clear();
         
         for role in guild.roles.iter() {
             self.update_role(guild.id, role);
@@ -120,6 +202,7 @@ impl ServerState {
     }
     
     pub fn update_channel(&mut self, channel: &Channel) {
+        self.unavailable_channels.remove(&channel.id);
         let guild_id = if let Some(guild_id) = channel.guild_id {
             guild_id
         } else { return };
@@ -128,6 +211,7 @@ impl ServerState {
     }
     
     pub fn delete_channel(&mut self, guild: Snowflake, channel: Snowflake) {
+        self.unavailable_channels.remove(&channel);
         let state = if let Some(state) = self.guilds.get_mut(&guild) {
             state
         } else { return };
@@ -176,7 +260,7 @@ impl ServerState {
         let user_id = user;
         let guild = self.guilds.get(&guild_id).ok_or_else(|| format!("guild not found {guild_id:?}"))?;
         
-        let is_owner = user_id == guild.owner;
+        let is_owner = Some(user_id) == guild.owner;
         
         if is_owner {
             return Ok(ALL);
@@ -195,28 +279,28 @@ impl ServerState {
             return Ok(ALL);
         }
         
-        let channel = guild.channels.get(&channel_id).ok_or_else(|| format!("channel not found {channel_id:?} in guild {guild_id:?}"))?;
-        
-        if let Some(ref ov) = channel.everyone_overwrite {
-            permissions &= !ov.deny;
-            permissions |= ov.allow;
-        }
-        
-        let mut allow = 0;
-        let mut deny = 0;
-        for role_id in roles.iter() {
-            if let Some(overwrite) = channel.role_overwrites.get(role_id) {
-                allow |= overwrite.allow;
-                deny |= overwrite.deny;
+        if let Some(channel) = guild.channels.get(&channel_id) {
+            if let Some(ref ov) = channel.everyone_overwrite {
+                permissions &= !ov.deny;
+                permissions |= ov.allow;
             }
-        }
-        
-        permissions &= !deny;
-        permissions |= allow;
-        
-        if let Some(overwrite) = channel.user_overwrites.get(&user_id) {
-            permissions &= !overwrite.deny;
-            permissions |= overwrite.allow;
+            
+            let mut allow = 0;
+            let mut deny = 0;
+            for role_id in roles.iter() {
+                if let Some(overwrite) = channel.role_overwrites.get(role_id) {
+                    allow |= overwrite.allow;
+                    deny |= overwrite.deny;
+                }
+            }
+            
+            permissions &= !deny;
+            permissions |= allow;
+            
+            if let Some(overwrite) = channel.user_overwrites.get(&user_id) {
+                permissions &= !overwrite.deny;
+                permissions |= overwrite.allow;
+            }
         }
         
         Ok(permissions)

@@ -28,6 +28,7 @@ mod server_settings;
 mod auto_live;
 
 use std::sync::Arc;
+use std::sync::atomic::{ Ordering, AtomicBool };
 use discord_lib::SendHandle;
 
 use sqlx::PgPool;
@@ -131,6 +132,7 @@ pub struct DiscordState {
     pool: PgPool,
     handlers: Arc<BTreeMap<&'static str, Box<dyn Handler>>>,
     command_aliases: Arc<BTreeMap<&'static str, &'static str>>,
+    is_ready: Arc<AtomicBool>,
     
     server_state: Arc<RwLock<ServerState>>,
 }
@@ -145,15 +147,20 @@ impl DiscordState {
         handlers: Arc<BTreeMap<&'static str, Box<dyn Handler>>>,
         command_aliases: Arc<BTreeMap<&'static str, &'static str>>,
     ) -> Self {
+        let send_handle = Arc::new(send_handle);
+        let mut server_state = ServerState::new();
+        server_state.send_handle = Some(Arc::clone(&send_handle));
+        
         Self {
             name: Arc::new(name),
-            send_handle: Arc::new(send_handle),
+            send_handle: send_handle,
             session,
             shared,
             pool,
             handlers,
             command_aliases,
-            server_state: Default::default(),
+            is_ready: Arc::new(AtomicBool::new(false)),
+            server_state: Arc::new(RwLock::new(server_state)),
         }
     }
     
@@ -386,6 +393,12 @@ async fn discord_stuff() {
             data.active.clone()
         };
         
+        for state in states.iter() {
+            if !state.is_ready.load(Ordering::Relaxed) {
+                sleep(::std::time::Duration::from_millis(100)).await;
+            }
+        }
+        dbg!("auto live starting");
         loop {
             let task = auto_live::holodex::auto_live_task(
                 &mut active, &task_pool,
@@ -407,7 +420,6 @@ async fn discord_stuff() {
                 }
             }
             
-            // delay_for(::std::time::Duration::new(30, 0)).await;
             sleep(::std::time::Duration::new(30, 0)).await;
         }
     });
@@ -447,12 +459,21 @@ async fn discord_stuff() {
                     match msg {
                         GM::Event(E::Ready(ready)) => {
                             {
+                                let mut state = discord_state.server_state.write().await;
+                                for guild in ready.guilds {
+                                    state.mark_guild_exists(guild.id);
+                                }
+                                state.send_handle = Some(discord_state.send_handle.clone());
+                            }
+                            
+                            {
                                 let mut data = session_state.borrow_data_mut().unwrap();
                                 data.session_id = Some(ready.session_id.clone());
                                 data.self_id = Some(ready.user.id.0);
                             }
                             self_id = Some(ready.user.id);
                             shared_state.save_server_state().await;
+                            shared_state.is_ready.store(true, Ordering::Relaxed);
                             eprintln!("{:>10}: ready", name);
                         }
                         GM::Event(E::Resumed) => {
@@ -461,7 +482,9 @@ async fn discord_stuff() {
                                 let data = session_state.borrow_data().unwrap();
                                 *server_state = data.server_state.clone();
                             }
+                            server_state.send_handle = Some(discord_state.send_handle.clone());
                             std::mem::drop(server_state);
+                            shared_state.is_ready.store(true, Ordering::Relaxed);
                             eprintln!("{:>10}: resumed", name);
                         }
                         GM::Hello(_) => {}

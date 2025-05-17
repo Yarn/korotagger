@@ -35,6 +35,7 @@ url = "2.2.2"
 linkify = "0.8.0"
 
 anyhow = "1.0"
+miette = { version = "7.6.0", features = ["fancy"] }
 
 # scraper = "0.12.0"
 

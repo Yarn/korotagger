@@ -216,11 +216,10 @@ impl Handler for ChannelWatchHandler {
         
         for target_channel in targets {
             let server_id = {
-                let state = cmd.state.server_state.read().await;
-                match  state.get_guild_of_channel(Snowflake(target_channel)) {
-                    Some(x) => x.0,
-                    None => {
-                       eprintln!("cwatch not in guild target: {}", target_channel);
+                match crate::ServerState::get_guild_of_channel(&cmd.state.server_state, Snowflake(target_channel)).await {
+                    Ok(x) => x.0,
+                    Err(err) => {
+                       eprintln!("cwatch could not get channel for guild({}) {}", target_channel, err);
                         continue
                     }
                 }
