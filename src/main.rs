@@ -690,11 +690,6 @@ async fn manage_admin(op: &str, user: u64) -> Result<(), sqlx::Error> {
 fn main() {
     let mut args = std::env::args().skip(1);
     match args.next().as_ref().map(|x| x.as_str()) {
-        Some("init") => {
-            // let _ = DB.try_load_all();
-            // DB.save_all().unwrap();
-            return
-        }
         Some("parse") => {
             let cmd = args.next().unwrap();
             
@@ -706,38 +701,39 @@ fn main() {
                     println!("{}", err);
                 }
             }
-            
-            return
         }
         Some("migrate") => {
-            // use discord_lib::tokio::runtime::Runtime;
             let rt = Runtime::new().unwrap();
             rt.block_on(migrate()).unwrap();
-            // migrate();
-            return
         }
         Some("mark_migrated") => {
             let rt = Runtime::new().unwrap();
             let version: i64 = args.next().unwrap().parse().unwrap();
             rt.block_on(mark_migrated(version)).unwrap();
-            return
         }
         Some("admin") => {
             let op = args.next().unwrap();
             let user: u64 = args.next().unwrap().parse().unwrap();
             
-            // use discord_lib::tokio::runtime::Runtime;
             let rt = Runtime::new().unwrap();
             rt.block_on(manage_admin(&op, user)).unwrap();
-            return
+        }
+        Some("from_i") => {
+            let val = args.next().unwrap();
+            let val: i64 = val.parse().unwrap();
+            println!("{}", from_i(val));
+        }
+        Some("to_i") => {
+            let val = args.next().unwrap();
+            let val: u64 = val.parse().unwrap();
+            println!("{}", to_i(val));
         }
         Some(_) => {
             println!("invalid arg");
-            return
         }
-        _ => {}
+        None => {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(discord_stuff());
+        }
     }
-    
-    let rt = Runtime::new().unwrap();
-    rt.block_on(discord_stuff());
 }
