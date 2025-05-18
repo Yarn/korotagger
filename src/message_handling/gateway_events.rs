@@ -146,57 +146,48 @@ pub async fn handle_event(
             let mut server_state = state.server_state.write().await;
             server_state.update_guild(&guild);
             std::mem::drop(server_state);
-            
-            state.save_server_state().await;
         }
         E::GuildUpdate(guild) => {
             // dbg!("guild update", guild.id);
             let mut server_state = state.server_state.write().await;
             server_state.update_guild(&guild);
             std::mem::drop(server_state);
-            state.save_server_state().await;
         }
         E::GuildDelete(guild) => {
             // dbg!("guild delete", guild.id);
             let mut server_state = state.server_state.write().await;
             server_state.delete_guild(guild.id);
             std::mem::drop(server_state);
-            state.save_server_state().await;
         }
         E::GuildRoleCreate(role) => {
             // dbg!("guild role create", role.guild_id);
             let mut server_state = state.server_state.write().await;
             server_state.update_role(role.guild_id, &role.role);
             std::mem::drop(server_state);
-            state.save_server_state().await;
         }
         E::GuildRoleUpdate(role) => {
             // dbg!("guild role update", role.guild_id);
             let mut server_state = state.server_state.write().await;
             server_state.update_role(role.guild_id, &role.role);
             std::mem::drop(server_state);
-            state.save_server_state().await;
         }
         E::GuildRoleDelete(role) => {
             // dbg!("guild role delete", role.guild_id);
             let mut server_state = state.server_state.write().await;
             server_state.delete_role(role.guild_id, role.role_id);
             std::mem::drop(server_state);
-            state.save_server_state().await;
         }
         E::ChannelCreate(chan) => {
             // dbg!("channel create", chan.guild_id);
             let mut server_state = state.server_state.write().await;
             server_state.update_channel(&chan);
             std::mem::drop(server_state);
-            state.save_server_state().await;
         }
         E::ChannelUpdate(chan) => {
             // dbg!("channel update", chan.guild_id);
             let mut server_state = state.server_state.write().await;
             server_state.update_channel(&chan);
             std::mem::drop(server_state);
-            state.save_server_state().await;
         }
         E::ChannelDelete(chan) => {
             // dbg!("channel delete", chan.guild_id);
@@ -204,9 +195,24 @@ pub async fn handle_event(
                 let mut server_state = state.server_state.write().await;
                 server_state.delete_channel(guild, chan.id);
                 std::mem::drop(server_state);
-                state.save_server_state().await;
             }
         }
         _ => ()
     }
 }
+
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "MESSAGE_REACTION_REMOVE_ALL".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "MESSAGE_DELETE_BULK".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_MEMBER_ADD".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_MEMBER_REMOVE".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_MEMBER_UPDATE".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_BAN_ADD".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_EMOJIS_UPDATE".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_BAN_REMOVE".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "TYPING_START".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "CHANNEL_PINS_UPDATE".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "INVITE_CREATE".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "INVITE_DELETE".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_JOIN_REQUEST_DELETE".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "INTEGRATION_CREATE".to_string() => {}
+// GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "WEBHOOKS_UPDATE".to_string() => {}

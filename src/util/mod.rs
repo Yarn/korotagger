@@ -1,5 +1,8 @@
 
 pub(crate) mod server_state;
+mod stopper;
+#[allow(unused_imports)]
+pub(crate) use stopper::{ Stopper, Stoppable };
 
 use std::fmt::Debug;
 use anyhow::{ Error, anyhow };

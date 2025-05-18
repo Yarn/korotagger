@@ -1,9 +1,9 @@
 
-use discord_lib::discord;
 use rustbreak::FileDatabase;
 use rustbreak::deser::Ron;
 #[allow(unused_imports)]
 use std::collections::{ HashMap, HashSet, BTreeMap, BTreeSet };
+use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
 use chrono::{ DateTime, FixedOffset };
 use tokio::time::sleep;
@@ -29,11 +29,13 @@ mod auto_live;
 
 use std::sync::Arc;
 use std::sync::atomic::{ Ordering, AtomicBool };
-use discord_lib::SendHandle;
+use discord_lib::{ Discord, SendHandle };
+use discord_lib::discord::Snowflake;
 
 use sqlx::PgPool;
 
 use util::server_state::ServerState;
+use util::Stoppable;
 use handlers::{ Handler, HandlerResult };
 
 type DateTimeF = DateTime<FixedOffset>;
@@ -45,26 +47,10 @@ pub struct SharedState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionState {
-    #[serde(default)]
-    clean_shutdown: bool,
-    session_id: Option<String>,
-    seq: Option<u64>,
-    self_id: Option<u64>,
-    #[serde(default)]
-    server_state: ServerState,
-}
-
-impl SessionState {
-    fn new() -> Self {
-        SessionState {
-            clean_shutdown: false,
-            session_id: None,
-            seq: None,
-            self_id: None,
-            server_state: Default::default(),
-        }
-    }
+struct Session {
+    self_id: Snowflake,
+    session_id: String,
+    seq: u64,
 }
 
 use discord_lib::discord::Message;
@@ -126,9 +112,8 @@ async fn get_pool() -> Result<PgPool, GetPoolError> {
 pub struct DiscordState {
     name: Arc<String>,
     send_handle: Arc<SendHandle>,
-    session: Arc<FileDatabase<SessionState, Ron>>,
-    #[allow(dead_code)]
-    shared: Arc<FileDatabase<SharedState, Ron>>,
+    session_path: Arc<PathBuf>,
+    session_lock: Arc<RwLock<bool>>,
     pool: PgPool,
     handlers: Arc<BTreeMap<&'static str, Box<dyn Handler>>>,
     command_aliases: Arc<BTreeMap<&'static str, &'static str>>,
@@ -141,8 +126,7 @@ impl DiscordState {
     pub fn new(
         name: String,
         send_handle: SendHandle,
-        session: Arc<FileDatabase<SessionState, Ron>>,
-        shared: Arc<FileDatabase<SharedState, Ron>>,
+        session_path: Arc<PathBuf>,
         pool: PgPool,
         handlers: Arc<BTreeMap<&'static str, Box<dyn Handler>>>,
         command_aliases: Arc<BTreeMap<&'static str, &'static str>>,
@@ -154,8 +138,8 @@ impl DiscordState {
         Self {
             name: Arc::new(name),
             send_handle: send_handle,
-            session,
-            shared,
+            session_path,
+            session_lock: Default::default(),
             pool,
             handlers,
             command_aliases,
@@ -164,21 +148,70 @@ impl DiscordState {
         }
     }
     
-    pub async fn new_session(&self) {
-        let mut server_state = self.server_state.write().await;
-        *server_state = Default::default();
+    async fn load_session(&self) -> miette::Result<Option<Session>> {
+        let server_state = Arc::clone(&self.server_state);
+        let session_lock = Arc::clone(&self.session_lock);
+        let session_path = Arc::clone(&self.session_path);
+        let send_handle = self.send_handle.clone();
+        tokio::task::spawn_blocking(move || {
+            let lock = session_lock.blocking_read();
+            
+            let file = match std::fs::File::open(&*session_path) {
+                Ok(file) => file,
+                Err(err) => {
+                    match err.kind() {
+                        std::io::ErrorKind::NotFound => {
+                            return Ok(None);
+                        }
+                        _ => ()
+                    }
+                    return Err(miette::Report::from_err(err));
+                }
+            };
+            use miette::IntoDiagnostic as _;
+            
+            #[derive(Deserialize)]
+            struct SessionState {
+                session: Option<Session>,
+                server_state: ServerState,
+            }
+            
+            let state: SessionState = serde_json::from_reader(file).into_diagnostic()?;
+            
+            let mut server_state = server_state.blocking_write();
+            *server_state = state.server_state;
+            server_state.send_handle = Some(send_handle.clone());
+            
+            std::mem::drop(server_state);
+            std::mem::drop(lock);
+            Ok(state.session)
+        }).await.unwrap()
+        
     }
     
-    async fn save_server_state(&self) {
+    async fn save_session(&self, session: Option<Session>) {
         let server_state = Arc::clone(&self.server_state);
-        let session = Arc::clone(&self.session);
+        let session_lock = Arc::clone(&self.session_lock);
+        let session_path = Arc::clone(&self.session_path);
         tokio::task::spawn_blocking(move || {
+            let lock = session_lock.blocking_write();
+            
+            #[derive(Serialize)]
+            struct SessionState<'a> {
+                session: Option<Session>,
+                server_state: &'a ServerState,
+            }
+            
             let state = server_state.blocking_read();
-            let mut data = session.borrow_data_mut().unwrap();
-            data.server_state = state.clone();
+            let session = SessionState {
+                session: session,
+                server_state: &state,
+            };
+            let file = std::fs::File::create(&*session_path).unwrap();
+            serde_json::to_writer(file, &session).unwrap();
+            
             std::mem::drop(state);
-            std::mem::drop(data);
-            session.save().unwrap();
+            std::mem::drop(lock);
         }).await.unwrap();
     }
 }
@@ -193,46 +226,24 @@ struct BotConfig {
 pub struct Bot {
     discord: discord_lib::Discord,
     state: DiscordState,
-    seq: Option<u64>,
 }
 
 impl Bot {
     async fn new(
-        shared_state: Arc<FileDatabase<SharedState, Ron>>,
-        session_state: Arc<FileDatabase<SessionState, Ron>>,
+        session_path: Arc<PathBuf>,
         name: &str,
         token: &str,
         pool: PgPool,
         handlers: Arc<BTreeMap<&'static str, Box<dyn Handler>>>,
         command_aliases: Arc<BTreeMap<&'static str, &'static str>>,
     ) -> Self {
-        
-        
-        let mut last_seq: Option<u64> = None;
-        let discord_obj = {
-            let mut data = session_state.borrow_data_mut().unwrap();
-            let discord = match (&data.session_id, &data.seq, &data.clean_shutdown) {
-                (Some(ref session_id), Some(seq), true) => {
-                    last_seq = data.seq;
-                    
-                    discord_lib::Discord::reconnect_with(BASE_URL.into(), token.to_string(), session_id.clone(), *seq).await.unwrap()
-                }
-                _ => {
-                    data.session_id = None;
-                    data.seq = None;
-                    discord_lib::Discord::connect(BASE_URL.into(), token.to_string()).await.unwrap()
-                }
-            };
-            data.clean_shutdown = false;
-            discord
-        };
+        let discord_obj = discord_lib::Discord::new(BASE_URL.into(), token.to_string());
         
         let send_handle = discord_obj.get_send_handle();
         let d_state = DiscordState::new(
             name.to_string(),
-            send_handle.clone(),
-            session_state.clone(),
-            shared_state.clone(),
+            send_handle,
+            session_path,
             pool,
             handlers,
             command_aliases,
@@ -241,10 +252,176 @@ impl Bot {
         let bot = Bot {
             discord: discord_obj,
             state: d_state,
-            seq: last_seq,
         };
         
         bot
+    }
+}
+
+async fn connect(discord_obj: &mut Discord, session: &Option<Session>, stoppable: &mut Stoppable) -> Result<(), ()> {
+    let mut wait_secs = 1;
+    loop {
+        let inner = async {
+            match session.as_ref() {
+                Some(session) => {
+                    discord_obj.reconnect_with(
+                        session.session_id.clone(),
+                        session.seq,
+                    ).await
+                }
+                None => {
+                    discord_obj.connect().await
+                }
+            }
+        };
+        
+        match stoppable.run(inner).await {
+            Some(Ok(())) => {
+                break
+            }
+            Some(Err(err)) => {
+                println!("Could not establish connection ({}s): {:?}", wait_secs, err);
+                stoppable.run(sleep(::std::time::Duration::new(wait_secs, 0))).await
+                    .ok_or(())?;
+                if wait_secs < 20 {
+                    wait_secs *= 2;
+                }
+            }
+            None => return Err(()),
+        }
+    };
+    Ok(())
+}
+
+async fn reconnect(discord_obj: &mut Discord, stoppable: &mut Stoppable) -> Result<(), ()> {
+    let mut wait_secs = 1;
+    loop {
+        match stoppable.run(discord_obj.reconnect()).await {
+            Some(Ok(is_reconnect)) => {
+                if is_reconnect {
+                    eprintln!("IS RECONNECT");
+                }
+                break
+            }
+            Some(Err(err)) => {
+                println!("Could not re-establish connection ({}s): {:?}", wait_secs, err);
+                stoppable.run(sleep(::std::time::Duration::new(wait_secs, 0))).await
+                    .ok_or(())?;
+                if wait_secs < 20 {
+                    wait_secs *= 2;
+                }
+            }
+            None => return Err(()),
+        }
+    };
+    Ok(())
+}
+
+async fn handle_discord_connection(
+    mut bot: Bot,
+    mut stoppable: Stoppable,
+) -> miette::Result<Session> {
+    let ref mut discord_obj = bot.discord;
+    let ref discord_state = bot.state;
+    let name = discord_state.name.as_str();
+    
+    let discord_state = Arc::new(discord_state.clone());
+    
+    use discord_lib::gateway::GatewayMessage as GM;
+    use discord_lib::gateway::Event as E;
+    
+    let session = discord_state.load_session().await?;
+    
+    match session.as_ref() {
+        Some(session) => {
+            eprintln!("{:>10}: reconnecting {:?}", bot.state.name, session);
+        }
+        None => {}
+    }
+    if let Err(()) = connect(discord_obj, &session, &mut stoppable).await {
+        return session.ok_or_else(|| miette::miette!("no session"));
+    }
+    
+    let mut old_session: miette::Result<Session> = session.ok_or_else(|| miette::miette!("no session"));
+    loop {
+        let mut session = loop {
+            let res = match stoppable.run(discord_obj.recv()).await {
+                Some(res) => res,
+                None => return old_session,
+            };
+            
+            match res {
+                Ok(GM::Event(E::Ready(ready))) => {
+                    {
+                        let mut state = discord_state.server_state.write().await;
+                        state.clear();
+                        for guild in ready.guilds {
+                            state.mark_guild_exists(guild.id);
+                        }
+                        state.send_handle = Some(discord_state.send_handle.clone());
+                    }
+                    
+                    discord_state.is_ready.store(true, Ordering::Relaxed);
+                    eprintln!("{:>10}: ready", name);
+                    break Session {
+                        self_id: ready.user.id,
+                        session_id: ready.session_id,
+                        seq: discord_obj.seq().unwrap_or(0),
+                    };
+                }
+                Ok(GM::Event(E::Resumed)) => {
+                    discord_state.is_ready.store(true, Ordering::Relaxed);
+                    eprintln!("{:>10}: resumed", name);
+                    break old_session.unwrap();
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    eprintln!("Err recieving message: {:?}", err);
+                    if let Err(()) = reconnect(discord_obj, &mut stoppable).await {
+                        return old_session;
+                    }
+                }
+            }
+        };
+        
+        loop {
+            let res = match stoppable.run(discord_obj.recv()).await {
+                Some(res) => res,
+                None => return Ok(session),
+            };
+            
+            match res {
+                Ok(msg) => {
+                    match msg {
+                        GM::Hello(_) => {}
+                        
+                        GM::Event(event) => {
+                            message_handling::handle_event(
+                                event,
+                                discord_state.clone(),
+                                Some(session.self_id),
+                            ).await;
+                        }
+                        
+                        GM::Raw(_msg) => {
+                            // eprintln!("\n\n?RAW {:?}", _msg);
+                        }
+                        _other => {
+                            // eprintln!("\n\n?OTHER {:?}", _other);
+                        }
+                    }
+                    session.seq = discord_obj.seq().unwrap_or(0);
+                },
+                Err(err) => {
+                    eprintln!("Err recieving message: {:?}", err);
+                    if let Err(()) = reconnect(discord_obj, &mut stoppable).await {
+                        return Ok(session);
+                    }
+                    break;
+                }
+            }
+        }
+        old_session = Ok(session);
     }
 }
 
@@ -362,23 +539,19 @@ async fn discord_stuff() {
     for config in bot_config {
         let mut path = state_path.clone();
         path.push(&format!("kq_session_{}.ron", &config.name));
-        let session_state = FileDatabase::from_path(
-            &path,
-            SessionState::new(),
-        ).unwrap();
-        let _ = session_state.load();
-        let session_state = Arc::new(session_state);
+        
+        let mut new_path = state_path.clone();
+        new_path.push(&format!("kq_session_{}.json", &config.name));
         
         let bot = Bot::new(
-            shared_state.clone(),
-            session_state,
+            Arc::new(new_path),
             &config.name,
             &config.token,
             pool.clone(),
             handlers.clone(),
             command_aliases.clone(),
         ).await;
-        eprintln!("{:>10}: seq: {:?}", bot.state.name, bot.seq);
+        eprintln!("{:>10}:", bot.state.name);
         bots.push(bot);
     }
     
@@ -424,174 +597,30 @@ async fn discord_stuff() {
         }
     });
     
-    async fn handle_discord_connection(
-        mut bot: Bot,
-        mut stopping: tokio::sync::mpsc::Receiver<()>,
-    ) -> Result<Option<u64>, ()> {
-        let mut self_id = {
-            let data = bot.state.session.borrow_data_mut().unwrap();
-            data.self_id.map(|x| discord::Snowflake(x))
-        };
-        let ref mut discord_obj = bot.discord;
-        let ref discord_state = bot.state;
-        let name = discord_state.name.as_str();
-        let ref session_state = discord_state.session;
-        
-        let shared_state = Arc::new(discord_state.clone());
-        
-        loop {
-            use discord_lib::gateway::GatewayError;
-            
-            let res = tokio::select! {
-                msg = discord_obj.recv() => {
-                    msg
-                }
-                _ = stopping.recv() => {
-                    return Ok(bot.seq);
-                }
-            };
-            
-            match res {
-                Ok(msg) => {
-                    use discord_lib::gateway::GatewayMessage as GM;
-                    use discord_lib::gateway::Event as E;
-                    
-                    match msg {
-                        GM::Event(E::Ready(ready)) => {
-                            {
-                                let mut state = discord_state.server_state.write().await;
-                                for guild in ready.guilds {
-                                    state.mark_guild_exists(guild.id);
-                                }
-                                state.send_handle = Some(discord_state.send_handle.clone());
-                            }
-                            
-                            {
-                                let mut data = session_state.borrow_data_mut().unwrap();
-                                data.session_id = Some(ready.session_id.clone());
-                                data.self_id = Some(ready.user.id.0);
-                            }
-                            self_id = Some(ready.user.id);
-                            shared_state.save_server_state().await;
-                            shared_state.is_ready.store(true, Ordering::Relaxed);
-                            eprintln!("{:>10}: ready", name);
-                        }
-                        GM::Event(E::Resumed) => {
-                            let mut server_state = discord_state.server_state.write().await;
-                            {
-                                let data = session_state.borrow_data().unwrap();
-                                *server_state = data.server_state.clone();
-                            }
-                            server_state.send_handle = Some(discord_state.send_handle.clone());
-                            std::mem::drop(server_state);
-                            shared_state.is_ready.store(true, Ordering::Relaxed);
-                            eprintln!("{:>10}: resumed", name);
-                        }
-                        GM::Hello(_) => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "MESSAGE_REACTION_REMOVE_ALL".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "MESSAGE_DELETE_BULK".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_MEMBER_ADD".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_MEMBER_REMOVE".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_MEMBER_UPDATE".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_BAN_ADD".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_EMOJIS_UPDATE".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_BAN_REMOVE".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "TYPING_START".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "CHANNEL_PINS_UPDATE".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "INVITE_CREATE".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "INVITE_DELETE".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "GUILD_JOIN_REQUEST_DELETE".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "INTEGRATION_CREATE".to_string() => {}
-                        // GM::Event(E::Unknown(event_type, _)) if event_type.as_str() == "WEBHOOKS_UPDATE".to_string() => {}
-                        GM::Event(event) => {
-                            message_handling::handle_event(
-                                event,
-                                shared_state.clone(),
-                                self_id,
-                            ).await;
-                        }
-                        
-                        GM::Raw(_msg) => {
-                            // eprintln!("\n\n?RAW {:?}", _msg);
-                        }
-                        _other => {
-                            // eprintln!("\n\n?OTHER {:?}", _other);
-                        }
-                    }
-                },
-                Err(err) => {
-                    eprintln!("Err recieving message: {:?}", err);
-                    
-                    if let GatewayError::InvalidSession = err {
-                        eprintln!("InvalidSession: ");
-                        discord_state.new_session().await;
-                        bot.seq = None;
-                        {
-                            let mut data = session_state.borrow_data_mut().unwrap();
-                            
-                            data.session_id = None;
-                            data.seq = None;
-                        }
-                        session_state.save().unwrap();
-                    }
-                    
-                    let mut wait_secs = 1;
-                    loop {
-                        // match discord_lib::Discord::connect(BASE_URL.into(), token.clone()).await {
-                        match discord_obj.reconnect().await {
-                            Ok(is_reconnect) => {
-                                if is_reconnect {
-                                    eprintln!("IS RECONNECT");
-                                    // reconnecting = true;
-                                }
-                                break
-                            }
-                            Err(err) => {
-                                println!("Could not re-establish connection ({}s): {:?}", wait_secs, err);
-                                // use discord_lib::tokio::time::delay_for;
-                                sleep(::std::time::Duration::new(wait_secs, 0)).await;
-                                if wait_secs < 20 {
-                                    wait_secs *= 2;
-                                }
-                            }
-                        }
-                    };
-                    continue
-                }
-            }
-            // dbg!(&msg);
-            
-            bot.seq = discord_obj.seq();
-        }
-    }
-    
     let mut tasks = Vec::new();
     for bot in bots.into_iter() {
-        let (stop_send, stopping) = tokio::sync::mpsc::channel(1);
+        let (stopper, stoppable) = Stoppable::new();
         let state = bot.state.clone();
         let task = tokio::task::spawn(handle_discord_connection(
             bot,
-            stopping,
+            stoppable,
         ));
-        tasks.push((task, state, stop_send));
+        tasks.push((task, state, stopper));
     }
     
     tokio::signal::ctrl_c().await.unwrap();
     eprintln!("stopping");
     let mut all_stopped = async move || {
-        for (_, _, stop_send) in tasks.iter_mut() {
-            let _ = stop_send.try_send(());
+        for (_, _, stopper) in tasks.iter_mut() {
+            let _ = stopper.stop().await;
         }
         
         for (task, state, _) in tasks.iter_mut() {
             match task.await {
-                Ok(Ok(seq)) => {
-                    {
-                        let mut data = state.session.borrow_data_mut().unwrap();
-                        data.seq = seq;
-                        data.clean_shutdown = true;
-                    }
-                    state.save_server_state().await;
+                Ok(Ok(session)) => {
+                    state.save_session(
+                        Some(session),
+                    ).await;
                     eprintln!(". {}", state.name);
                 },
                 err => {
