@@ -207,10 +207,14 @@ impl DiscordState {
                 session: session,
                 server_state: &state,
             };
-            let file = std::fs::File::create(&*session_path).unwrap();
+            let mut tmp_path = session_path.file_name().unwrap_or(std::ffi::OsStr::new("")).to_owned();
+            tmp_path.push(std::ffi::OsStr::new(".tmp"));
+            let file = std::fs::File::create(&tmp_path).unwrap();
             serde_json::to_writer(file, &session).unwrap();
-            
             std::mem::drop(state);
+            
+            std::fs::rename(&tmp_path, &*session_path).unwrap();
+            
             std::mem::drop(lock);
         }).await.unwrap();
     }
