@@ -19,6 +19,22 @@ impl Handler for CacheHandler {
                 let mut state = command.state.server_state.write().await;
                 state.clear_unavailable(Some(chan_id));
             }
+            &["check", ref tail @ ..] => {
+                let chan_id = match tail {
+                    &[] => command.message.channel_id,
+                    &[chan] => {
+                        command.require_global_admin().await?;
+                        let chan: u64 = chan.parse()
+                            .map_err(|_err| HandlerError::with_message("Invalid channel id".into()))?;
+                        Snowflake(chan)
+                    }
+                    _ => {
+                        return Ok("check: Invalid args".into());
+                    }
+                };
+                let state = command.state.server_state.read().await;
+                return Ok(state.check_availability(chan_id).to_str().into());
+            }
             &["all"] => {
                 command.require_global_admin().await?;
                 let mut state = command.state.server_state.write().await;
@@ -32,7 +48,9 @@ impl Handler for CacheHandler {
                 let mut state = command.state.server_state.write().await;
                 state.clear_unavailable(Some(chan));
             }
-            _ => (),
+            _ => {
+                return Ok("Invalid args".into());
+            }
         }
         
         Ok("_".into())

@@ -47,6 +47,23 @@ pub struct ServerState {
     pub(crate) send_handle: Option<Arc<SendHandle>>,
 }
 
+pub enum UnavailableState {
+    Unavailable,
+    Cached,
+    Unseen,
+}
+
+impl UnavailableState {
+    pub fn to_str(&self) -> &'static str {
+        use UnavailableState::*;
+        match self {
+            Unavailable => "unavailable",
+            Cached => "cached",
+            Unseen => "unseen",
+        }
+    }
+}
+
 impl ServerState {
     #[allow(dead_code)]
     pub fn new() -> Self {
@@ -64,6 +81,20 @@ impl ServerState {
         } else {
             self.unavailable_channels.clear();
         }
+    }
+    
+    pub fn check_availability(&self, channel: Snowflake) -> UnavailableState {
+        if self.unavailable_channels.contains(&channel) {
+            return UnavailableState::Unavailable;
+        }
+        
+        for (_, guild) in self.guilds.iter() {
+            if guild.channels.contains_key(&channel) {
+                return UnavailableState::Cached;
+            }
+        }
+        
+        UnavailableState::Unseen
     }
     
     pub async fn get_guild_of_channel(locked: &RwLock<Self>, channel_id: Snowflake) -> miette::Result<Snowflake> {
