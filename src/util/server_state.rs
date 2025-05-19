@@ -58,6 +58,14 @@ impl ServerState {
         self.unavailable_channels.clear();
     }
     
+    pub fn clear_unavailable(&mut self, channel: Option<Snowflake>) {
+        if let Some(channel) = channel {
+            self.unavailable_channels.remove(&channel);
+        } else {
+            self.unavailable_channels.clear();
+        }
+    }
+    
     pub async fn get_guild_of_channel(locked: &RwLock<Self>, channel_id: Snowflake) -> miette::Result<Snowflake> {
         let state = locked.read().await;
         

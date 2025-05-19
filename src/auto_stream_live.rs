@@ -88,7 +88,6 @@ pub async fn process_generic(
             for state in states {
                 match crate::ServerState::get_guild_of_channel(&state.server_state, Snowflake(channel_id)).await {
                     Ok(_guild_id) => {
-                        dbg!(guild_id);
                         guild_id = Some(_guild_id);
                         updated_channels.push((channel_id, &state.send_handle));
                         break;

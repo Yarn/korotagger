@@ -500,7 +500,7 @@ async fn discord_stuff() {
         use handlers::test_handler::TestHandler;
         use handlers::streams::{ OffsetHandler, YtStartHandler, TwitchStartHandler, TwitterSpaceStartHandler, SetStreamHandler, ManualStartHandler };
         use handlers::config::{ SubscribeHandler, ManageAdminHandler };
-        use handlers::jank::CopyTagsHandler;
+        use handlers::jank::{ CacheHandler, CopyTagsHandler };
         // use members::handlers::{ MembersHandler, MembersAdminHandler, VerifyHandler };
         use auto_live::channel_watch::ChannelWatchHandler;
         // use help_text::HelpHandler;
@@ -520,6 +520,7 @@ async fn discord_stuff() {
         handlers.insert("stream", Box::new(SetStreamHandler { pool: pool.clone() }));
         handlers.insert("sub", Box::new(SubscribeHandler { pool: pool.clone() }));
         handlers.insert("admin", Box::new(ManageAdminHandler { pool: pool.clone() }));
+        handlers.insert("purge", Box::new(CacheHandler {}));
         
         handlers.insert("watch_channel", Box::new(ChannelWatchHandler::new(pool.clone())));
         Arc::new(handlers)

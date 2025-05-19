@@ -1,10 +1,43 @@
 
 use async_trait::async_trait;
+use crate::Snowflake;
 
 use super::{ Handler, HandlerResult, HandlerError, Command };
 
 use sqlx::PgPool;
 use crate::db_util;
+
+#[derive(Debug)]
+pub struct CacheHandler {}
+
+#[async_trait]
+impl Handler for CacheHandler {
+    async fn handle_command_b(&self, command: Command<'_>) -> HandlerResult {
+        match command.args {
+            &[] => {
+                let chan_id = command.message.channel_id;
+                let mut state = command.state.server_state.write().await;
+                state.clear_unavailable(Some(chan_id));
+            }
+            &["all"] => {
+                command.require_global_admin().await?;
+                let mut state = command.state.server_state.write().await;
+                state.clear_unavailable(None);
+            }
+            &[chan] => {
+                command.require_global_admin().await?;
+                let chan: u64 = chan.parse()
+                    .map_err(|_err| HandlerError::with_message("Invalid channel id".into()))?;
+                let chan = Snowflake(chan);
+                let mut state = command.state.server_state.write().await;
+                state.clear_unavailable(Some(chan));
+            }
+            _ => (),
+        }
+        
+        Ok("_".into())
+    }
+}
 
 #[derive(Debug)]
 pub struct CopyTagsHandler {
